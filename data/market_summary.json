@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-09-17T06:12:40Z",
+  "generated_at": "2026-09-21T07:11:41Z",
   "source": "zillow research sample",
   "totals": {
-    "rows": 22030,
-    "cities": 36
+    "rows": 22035,
+    "cities": 37
   },
   "cities": {
     "ajax": {
@@ -133,6 +133,22 @@
       "shareUnder1M": 0.956,
       "medianSqft": 1652.5,
       "updated": "2026-09-17"
+    },
+    "gatineau-qc": {
+      "count": 9,
+      "medianPrice": 999000,
+      "q1Price": 339450,
+      "q3Price": 2337000,
+      "medianByBeds": {
+        "1": 267400,
+        "2": 409000,
+        "3": 999000,
+        "4": 1679000,
+        "5+": 3799500
+      },
+      "shareUnder1M": 0.556,
+      "medianSqft": null,
+      "updated": "2026-09-20"
     },
     "guelph": {
       "count": 562,
@@ -359,18 +375,18 @@
       "updated": "2026-09-17"
     },
     "ottawa": {
-      "count": 1047,
+      "count": 1043,
       "medianPrice": 729900,
       "q1Price": 565000,
-      "q3Price": 995000,
+      "q3Price": 989000,
       "medianByBeds": {
         "1": 319000,
         "2": 429450,
         "3": 649000,
-        "4": 875000,
-        "5+": 1132500
+        "4": 874900,
+        "5+": 1117500
       },
-      "shareUnder1M": 0.775,
+      "shareUnder1M": 0.778,
       "medianSqft": null,
       "updated": "2026-09-17"
     },
