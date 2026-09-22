@@ -1,21 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import geography from "@/public/geography/ontario.json";
+import geography from "@/public/geography/canada.json";
 import type { CitySummary } from "@/lib/types";
 import Icon from "./Icon";
 import { cityName, compactMoney } from "./format";
 
-const project = (lon: number, lat: number) => [(lon + 85) * 110, (49 - lat) * 155];
-const initial = { x: 568, y: 647, scale: 1 };
+const project = (lon: number, lat: number) => [(lon + 141) * 12, (72 - lat) * 24];
+const initial = { x: 534, y: 390, scale: 0.69 };
 const points = geography.cities as Record<string, { point: number[]; lon: number; lat: number }>;
-const priority = ["toronto", "ottawa", "hamilton", "london", "kitchener", "barrie", "kingston", "windsor", "sarnia", "peterborough", "sudbury", "thunder-bay", "sault-ste-marie", "niagara-falls"];
+const priority = ["toronto", "vancouver", "montreal", "calgary", "edmonton", "ottawa", "winnipeg", "halifax", "victoria", "st-johns", "saskatoon", "regina", "charlottetown", "fredericton"];
+const provinceLabels = [
+  { name: "BRITISH COLUMBIA", lon: -125.0, lat: 55.0 },
+  { name: "ALBERTA", lon: -114.5, lat: 55.5 },
+  { name: "SASKATCHEWAN", lon: -106.5, lat: 55.0 },
+  { name: "MANITOBA", lon: -97.0, lat: 57.5 },
+  { name: "ONTARIO", lon: -86.0, lat: 50.0 },
+  { name: "QUEBEC", lon: -72.0, lat: 53.0 },
+  { name: "NUNAVUT", lon: -95.0, lat: 66.0 },
+];
 const lakeLabels = [
+  { name: "GREAT BEAR LAKE", lon: -120.5, lat: 66.0 },
+  { name: "GREAT SLAVE LAKE", lon: -114.0, lat: 61.5 },
+  { name: "LAKE WINNIPEG", lon: -97.2, lat: 52.5 },
+  { name: "LAKE SUPERIOR", lon: -87.5, lat: 47.7 },
   { name: "LAKE HURON", lon: -82.5, lat: 44.8 },
   { name: "LAKE ONTARIO", lon: -77.85, lat: 43.62 },
   { name: "LAKE ERIE", lon: -81.05, lat: 42.08 },
   { name: "GEORGIAN BAY", lon: -80.72, lat: 45.38 },
-  { name: "LAKE SUPERIOR", lon: -86.7, lat: 47.55 },
 ];
 
 type Props = {
@@ -34,7 +46,7 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
   const [camera, setCamera] = useState(initial);
   const [dragging, setDragging] = useState(false);
   const drag = useRef<{ x: number; y: number; camera: typeof initial } | null>(null);
-  const [extent, setExtent] = useState<"south" | "all">("south");
+  const [extent, setExtent] = useState<"canada" | "metros">("canada");
   const [headingBox, setHeadingBox] = useState({ left: 0, top: 0, right: 0, bottom: 0 });
 
   useEffect(() => {
@@ -84,9 +96,10 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
     });
   }, [selected, size.width, size.height]);
 
-  function fit(all: boolean) {
-    setExtent(all ? "all" : "south");
-    const coords = (all ? Object.keys(points) : priority.filter(city => !["thunder-bay", "sault-ste-marie", "sudbury"].includes(city))).map(city => points[city].point);
+  function fit(canada: boolean) {
+    setExtent(canada ? "canada" : "metros");
+    // Canada frames the lon -141..-52, lat 42..72 country frame; metros fits the priority cities.
+    const coords = (canada ? [project(-141, 72), project(-52, 42)] : priority.filter(city => points[city]).map(city => points[city].point));
     const xs = coords.map(p => p[0]);
     const ys = coords.map(p => p[1]);
     const minX = Math.min(...xs), maxX = Math.max(...xs);
@@ -102,7 +115,7 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
   const markers = useMemo(() => {
     const ordered = Array.from(new Set([selected, ...compared, ...priority, ...visible])).filter(city => visible.includes(city));
     const placed: { x: number; y: number }[] = [];
-    return ordered.flatMap(city => {
+    const markers = ordered.flatMap(city => {
       const point = points[city]?.point;
       if (!point) return [];
       const x = (point[0] - camera.x) * camera.scale + size.width / 2;
@@ -116,7 +129,7 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
           const lx = x + dx, ly = y + dy;
           const underTitle = lx < (size.width <= 640 ? 255 : 300) && ly < (size.width <= 640 && size.height < 650 ? 100 : 170);
           const underHeading = (lx < headingBox.right && ly < headingBox.bottom) || underTitle;
-          const underTray = size.width > 640 && lx > size.width - 345 && ly > size.height - 330;
+          const underTray = size.width > 640 && lx + 110 > size.width - 345 && ly + 60 > size.height - 360;
           if (lx < 12 || lx > size.width - 110 || ly < 70 || ly > size.height - (size.width <= 640 ? (size.height < 650 ? 395 : 450) : 80) || underHeading || underTray) continue;
           if (!placed.some(p => Math.abs(p.x - lx) < 104 && Math.abs(p.y - ly) < 65)) {
             label = { x: lx, y: ly };
@@ -127,6 +140,9 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
       }
       return [{ city, x, y, label }];
     });
+    // Paint priority majors last so the visible dot in a dense stack selects the major city.
+    markers.sort((a, b) => Number(priority.includes(a.city)) - Number(priority.includes(b.city)));
+    return markers;
   }, [visible, selected, compared, camera, size, headingBox]);
 
   return <div className={`map-canvas${dragging ? " is-dragging" : ""}`} ref={container}>
@@ -148,12 +164,19 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
       aria-hidden="true">
       <svg className="basemap" viewBox={`${camera.x - size.width / camera.scale / 2} ${camera.y - size.height / camera.scale / 2} ${size.width / camera.scale} ${size.height / camera.scale}`}>
         <defs><pattern id="land-grain" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".45" fill="#71837b" opacity=".12" /></pattern></defs>
-        {geography.regions.map(region => <g key={region.name}><path d={region.path} className={region.name === "Ontario" ? "land ontario-land" : "land"} /><path d={region.path} fill="url(#land-grain)" /></g>)}
+        {geography.regions.map(region => <g key={region.name}><path d={region.path} className="land" /><path d={region.path} fill="url(#land-grain)" /></g>)}
         {geography.lakes.map(lake => <path key={lake.name} className="lake" d={lake.path} />)}
       </svg>
     </div>
     <div className="map-labels" aria-hidden="true">
-      <span className="province-label" style={{ left: (490 - camera.x) * camera.scale + size.width / 2, top: (440 - camera.y) * camera.scale + size.height / 2 }}>ONTARIO</span>
+      {provinceLabels.map(province => {
+        const p = project(province.lon, province.lat);
+        const left = (p[0] - camera.x) * camera.scale + size.width / 2;
+        const top = (p[1] - camera.y) * camera.scale + size.height / 2;
+        const half = province.name.length * 8.5 + 4;
+        if (left + half > headingBox.left && left - half < headingBox.right && top + 10 > headingBox.top && top - 10 < headingBox.bottom) return null;
+        return <span className="province-label" key={province.name} style={{ left, top }}>{province.name}</span>;
+      })}
       {lakeLabels.map(lake => {
         const p = project(lake.lon, lake.lat);
         const left = (p[0] - camera.x) * camera.scale + size.width / 2;
@@ -173,9 +196,9 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
         {marker.label ? <button className={`price-marker${marker.city === selected ? " selected" : ""}`} style={{ left: marker.label.x, top: marker.label.y }} onClick={() => onSelect(marker.city)} aria-pressed={marker.city === selected}><strong>{compactMoney(cities[marker.city].medianPrice)}</strong><span>{cityName(marker.city)}</span></button> : null}
       </div>)}
     </div>
-    <div className="map-heading" ref={heading}><span className="micro-label">THE HOUSING ATLAS</span><h1>Ontario,<br /><span>in perspective.</span></h1><p>Select a place. See what’s asking.</p></div>
-    <div className="map-region-control" role="group" aria-label="Map extent"><button aria-pressed={extent === "south"} onClick={() => fit(false)}>Southern Ontario</button><button aria-pressed={extent === "all"} onClick={() => fit(true)}>All cities</button></div>
-    <div className="map-controls"><div className="zoom-controls"><button onClick={() => zoom(1.3)} aria-label="Zoom in"><Icon name="plus" /></button><button onClick={() => zoom(1 / 1.3)} aria-label="Zoom out"><Icon name="minus" /></button></div><button className="recenter" aria-label="Reset map" onClick={() => fit(extent === "all")}><Icon name="locate" /></button></div>
+    <div className="map-heading" ref={heading}><span className="micro-label">THE HOUSING ATLAS</span><h1>Canada,<br /><span>in perspective.</span></h1><p>Select a place. See what’s asking.</p></div>
+    <div className="map-region-control" role="group" aria-label="Map extent"><button aria-pressed={extent === "canada"} onClick={() => fit(true)}>Canada</button><button aria-pressed={extent === "metros"} onClick={() => fit(false)}>Major metros</button></div>
+    <div className="map-controls"><div className="zoom-controls"><button onClick={() => zoom(1.3)} aria-label="Zoom in"><Icon name="plus" /></button><button onClick={() => zoom(1 / 1.3)} aria-label="Zoom out"><Icon name="minus" /></button></div><button className="recenter" aria-label="Reset map" onClick={() => fit(extent === "canada")}><Icon name="locate" /></button></div>
     <div className="map-compass" aria-hidden="true"><span>N</span><Icon name="send" /></div>
     {children}
     <div className="map-attribution"><span>City reference points · Not individual listings</span><span><a href="https://www.naturalearthdata.com/" target="_blank" rel="noreferrer">Natural Earth</a> / <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a></span></div>
