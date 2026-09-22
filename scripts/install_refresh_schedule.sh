@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Install (or refresh) the launchd agent that runs scripts/ontario_refresh.sh
-# every 6 hours. Idempotent: rerun after moving the checkout or editing paths.
-# Uninstall: launchctl bootout gui/$(id -u)/local.ontario-refresh \
+# Install (or refresh) the launchd agent that runs scripts/canada_refresh.sh
+# every 24 hours. Idempotent: rerun after moving the checkout or editing paths.
+# Uninstall: launchctl bootout gui/$(id -u)/local.canada-refresh \
+#            && rm ~/Library/LaunchAgents/local.canada-refresh.plist
+# The old local.ontario-refresh job must be uninstalled separately if present:
+#            launchctl bootout gui/$(id -u)/local.ontario-refresh \
 #            && rm ~/Library/LaunchAgents/local.ontario-refresh.plist
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 APP_REPO="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
-DRIVER="$APP_REPO/scripts/ontario_refresh.sh"
-LABEL="local.ontario-refresh"
+DRIVER="$APP_REPO/scripts/canada_refresh.sh"
+LABEL="local.canada-refresh"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
 LOG_FILE="$APP_REPO/output/refresh.log"

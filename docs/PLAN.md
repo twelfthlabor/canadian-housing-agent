@@ -5,8 +5,8 @@ Ontario Housing Agent demo. For the dataset itself, see [DATA.md](DATA.md).
 
 ## What the demo does
 
-Visitors chat with a tool-calling LLM agent about a research sample of 19,356
-Ontario for-sale listings across 36 cities. The agent loop calls deterministic
+Visitors chat with a tool-calling LLM agent about a research sample of 35,566
+Canadian for-sale listings across 123 cities in 11 provinces. The agent loop calls deterministic
 functions in `lib/tools.ts` for all search and stats work and streams the reply
 to the browser.
 
@@ -14,8 +14,8 @@ to the browser.
 
 | Component | Role | Status |
 | --- | --- | --- |
-| `pipeline/build_dataset.py` | Reads `../property-scraper/data/regions/*/listings.csv`, dedupes by listing id (never emitted), filters (price, beds/baths, implausible sqft), extracts the FSA, writes nine fields incl. address and source URL | built |
-| `data/listings.json`, `data/market_summary.json` | Published sample (19,356 rows) and per-city aggregates, kept as JSON in the repo (no database) | built |
+| `pipeline/build_dataset.py` | Reads `../property-scraper/data/regions/*/listings.csv`, dedupes by listing id (never emitted), filters (price, beds/baths, implausible sqft), extracts the FSA with a province sanity check, writes ten fields incl. province, address and source URL | built |
+| `data/listings.json`, `data/market_summary.json` | Published sample (35,566 rows, 123 cities, 11 provinces) and per-city aggregates, kept as JSON in the repo (no database) | built |
 | `lib/tools.ts` | Deterministic search/stats functions (`search_listings`, filtered `city_snapshot`, `rank_areas`, `compare_cities`) + OpenAI-style tool schemas | built; filters + `rank_areas` 2026-09-17 |
 | `/api/chat` | Streams the agent loop over SSE | built |
 | FSA narrowing | Optional `fsa` on `search_listings` and `city_snapshot`; full postal codes reduce to the 3-character FSA | built (2026-09-16) |
@@ -29,7 +29,7 @@ to the browser.
 | Groq `openai/gpt-oss-120b` | LLM provider on the free tier | built |
 | Gemini `gemini-2.5-flash-lite` | Optional fallback in `lib/providers.ts`; used only when `GEMINI_API_KEY` is set and Groq fails before emitting output | built |
 | `MOCK_LLM=1` | Deterministic mock LLM for tests/CI | built |
-| Evals harness (`evals/run.ts`, `npm run evals`) | 38 golden cases in `evals/cases.jsonl` (16 tool choice incl. multi-turn MT01-MT04, 10 numeric, 12 refusals) -> `evals/report.json` (gitignored) | plumbing green; live gate pending (last full pass: 32/32 on 2026-09-16) |
+| Evals harness (`evals/run.ts`, `npm run evals`) | 44 golden cases in `evals/cases.jsonl` (19 tool choice incl. multi-turn MT01-MT04, 12 numeric, 13 refusals) -> `evals/report.json` (gitignored) | plumbing green; live gate pending (last full pass: 32/32 on 2026-09-16) |
 | Langfuse Hobby traces | Observability | planned |
 | GitHub Actions CI | JS tests + build (Node 24, `MOCK_LLM=1`) and pipeline unittest (Python 3.11) gate | green on the first push (2026-09-16) |
 | Vercel Hobby deployment | Public URL | deployed 2026-09-16: https://ontario-housing-agent.vercel.app |
@@ -94,20 +94,22 @@ MOCK_LLM=1 npm run dev  # then curl a question POST to /api/chat;
                         # the stream returns a tool event and an answer
 ```
 
-### M2: Proof (32-case gate accepted 2026-09-16; 38-case suite pending live run)
+### M2: Proof (32-case gate accepted 2026-09-16; 44-case suite pending live run)
 
 `npm run evals` runs the golden cases in `evals/cases.jsonl` and writes
 `evals/report.json` (gitignored). Live scoring uses the Groq key in the
 gitignored `.env.local`; without a key the harness exits 1 with instructions.
 `MOCK_LLM=1 npm run evals` exercises the plumbing only (no network, exit 0).
 The 32-case suite passed 32/32 on 2026-09-16 (tool 1.00, numeric 1.00, refusal
-1.00). It has since grown to 38 cases: 16 tool choice (including MT01-MT04
+1.00). It has since grown to 44 cases: 19 tool choice (including MT01-MT04
 multi-turn and capability cases C01/C02 for filtered snapshots and
-`rank_areas`), 10 numeric, 12 scope refusals. Multi-turn cases run 2-3 user
+`rank_areas`, plus Canada cases T11-T13), 12 numeric (incl. N11/N12 for
+Vancouver), 13 scope refusals (R05/R06 reworked for the wider sample plus
+sparse-province R13). Multi-turn cases run 2-3 user
 turns, score only the final turn, and fail if the first turn used no tool;
 expectations may list `anyOf` alternatives, and the report is rewritten after
 each case so a quota-aborted run keeps partial results. No full live run of the
-38-case suite has completed: both 2026-09-17 attempts hit the Groq daily token
+44-case suite has completed: both 2026-09-17 attempts hit the Groq daily token
 cap (13/38 and 1/38 recorded); see [STATUS.md](STATUS.md) for evidence paths.
 Earlier 32-case runs failed (25/30 on the old 30-case suite, then 31/32 and
 30/32 after the suite grew to 32) and drove the scorer and prompt fixes,
@@ -177,13 +179,13 @@ Landed: `city_snapshot` filters (`minPrice`, `maxPrice`, `beds`, `bathsMin`,
 `null` when nothing matches), the `rank_areas` tool (median price or count, 5+
 matching listings per area, default limit 5 / max 10, `considered` /
 `totalAreas`), the collapsible provenance block in chat, metadata-only
-`chat_turn` logs, and a 38-case eval suite that adds multi-turn cases
+`chat_turn` logs, and a 44-case eval suite that adds multi-turn cases
 (MT01-MT04) and capability cases (C01, C02) for the two new behaviors.
 Multi-turn coverage is no longer missing.
 
 Acceptance: `MOCK_LLM=1 npm test`, `python3 -m unittest discover -s
 pipeline/tests`, `npx tsc --noEmit`, `MOCK_LLM=1 npm run build`, and
-`MOCK_LLM=1 npm run evals` over 38 cases, then a full live run. The live run is
+`MOCK_LLM=1 npm run evals` over 44 cases, then a full live run. The live run is
 pending: both 2026-09-17 attempts hit the Groq daily token cap (13/38 and 1/38
 recorded). The last completed full-suite pass remains the 32-case gate from
 2026-09-16 (32/32).

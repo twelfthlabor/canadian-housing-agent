@@ -1,0 +1,4 @@
+listing_id,address,price,beds,baths,sqft,agent,url,source_page,scraped_at
+V1,"6688 Cambie St, Vancouver, BC V6P 0E6",878000,2,2,846,Agent V,https://example.com/v1,1,2026-09-20T10:00:00Z
+V2,"10 King St W, Vancouver, BC M5H 1A1",950000,2,2,850,Agent W,https://example.com/v2,2,2026-09-20T10:00:00Z
+V3,"40 Elm St, Buffalo, NY 14201",700000,3,2,1200,Agent X,https://example.com/v3,3,2026-09-20T10:00:00Z

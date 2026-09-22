@@ -5,6 +5,7 @@ import type { Listing } from "../lib/types";
 
 const listing: Listing = {
   city: "ajax",
+  province: "ON",
   fsa: "L1Z",
   price: 495000,
   beds: 3,
@@ -58,14 +59,14 @@ describe("csvCell", () => {
 describe("csvRow / csvDocument", () => {
   it("joins cells with commas and applies per-cell quoting", () => {
     expect(csvRow(listing)).toBe(
-      'ajax,L1Z,495000,3,2,,2026-09-14,"18 Dexshire Dr, Ajax, ON ""A""",https://www.zillow.com/homedetails/x',
+      'ajax,ON,L1Z,495000,3,2,,2026-09-14,"18 Dexshire Dr, Ajax, ON ""A""",https://www.zillow.com/homedetails/x',
     );
   });
 
   it("joins the header and rows with CRLF and ends with CRLF", () => {
     const document = csvDocument([listing]);
     expect(document.split("\r\n")).toEqual([
-      "city,fsa,price,beds,baths,sqft,seen,address,url",
+      "city,province,fsa,price,beds,baths,sqft,seen,address,url",
       csvRow(listing),
       "",
     ]);
@@ -75,6 +76,6 @@ describe("csvRow / csvDocument", () => {
     const response = await GET(new NextRequest("http://localhost/api/listings?format=csv&city=toronto&limit=5"));
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/csv");
-    expect((await response.text()).split("\r\n")[0]).toBe("city,fsa,price,beds,baths,sqft,seen,address,url");
+    expect((await response.text()).split("\r\n")[0]).toBe("city,province,fsa,price,beds,baths,sqft,seen,address,url");
   });
 });

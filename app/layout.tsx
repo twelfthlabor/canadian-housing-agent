@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ontario Housing Atlas | Housing Agent",
+  title: "Canada Housing Atlas | Housing Agent",
   description:
-    "Explore Ontario asking prices on an interactive city atlas. Compare cities and ask questions about the research sample.",
+    "Explore Canadian asking prices on an interactive city atlas. Compare cities and ask questions about the research sample.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

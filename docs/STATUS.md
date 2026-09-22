@@ -1,3 +1,34 @@
+# Project status: 2026-09-22 (Canada-wide corpus; 2026-09-17 below)
+
+## Assessment (2026-09-22)
+
+The corpus is now national: the pipeline builds `data/listings.json` +
+`data/market_summary.json` from all 159 scrape regions (36 zero-row northern
+regions emit nothing). Rows carry a 10th field, `province` (2-letter directory
+suffix, authoritative); city keys stay bare with a build-time duplicate-stem
+assertion. FSA extraction is generic with a first-letter-to-province
+sanity check (mismatch -> null, never a drop).
+
+Local verification: `npm test` passes 162 tests in 8 files; the pipeline
+unittest suite passes 24 tests; `npx tsc --noEmit` is clean;
+`MOCK_LLM=1 npm run evals` selects all 44 cases and exits 0 (plumbing only,
+not a quality signal).
+
+Dataset: 35,566 rows, 123 cities, 11 provinces
+(ON 22,026 / BC 8,451 / NB 1,319 / NS 1,130 / AB 1,030 / SK 521 / PE 572 /
+NL 404 / QC 95 / MB 10 / NT 8; YT+NU 0). Filter report: 144 non-CA drops
+(US spillover, counted), 9 FSA/province mismatches (nulled), 417 null-FSA
+rows (407 spaceless postal codes, mostly NL). Eval suite is 44 cases: 19 tool
+choice (incl. T11-T13 Canada cases), 12 numeric (incl. N11/N12 Vancouver),
+13 refusals (R05 Buffalo out-of-sample, R06 Vancouver sold-price, R13 Selkirk
+sqft). No full live run of the 44-case suite has completed.
+
+Known gaps: no Canada basemap (Ontario basemap + Ontario-city dots only;
+`scripts/build_geography.py` is out of scope to extend); 407 spaceless postal
+codes yield no FSA under the specified `\b([A-Z]\d[A-Z])\b` pattern;
+`docs/DEMO.md` still describes the Ontario-era tour; the old
+`local.ontario-refresh` launchd job must be uninstalled by hand.
+
 # Project status: 2026-09-17
 
 ## Assessment

@@ -238,7 +238,7 @@ export function createMockProvider(): Provider {
         yield {
           type: "text",
           delta:
-            "I can only cover the Ontario cities in the listing sample. Ask about a city, for example Ottawa or Hamilton, or ask me to compare two cities.",
+            "I can only cover the Canadian cities in the listing sample. Ask about a city, for example Toronto or Vancouver, or ask me to compare two cities.",
         };
         return;
       }

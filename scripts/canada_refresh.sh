@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ontario data refresh driver for a scheduled job (every 6 hours).
+# Canada data refresh driver for a scheduled job (every 24 hours).
 #
 # Decisions, each gated on current state so repeated runs are safe:
 #   A. publish: no scrape running and region CSVs newer than the app snapshot
@@ -8,14 +8,17 @@
 #   B. refresh: no scrape running and (CSV set stale, a previous run left
 #      regions unfinished (pending/partial/challenged) past the start gap,
 #      or --force-refresh)
-#      -> start scripts/weekly_run.sh detached in the scraper repo.
+#      -> start scripts/pull_all_provinces.sh detached in the scraper repo.
 #
 # ../property-scraper is read-only: its region data, queue state, and regions
-# file are read, and weekly_run.sh is launched for decision B.
+# files are read, and pull_all_provinces.sh is launched for decision B.
+# The multi-province wrapper is launched bare (no --reopen): per-province
+# --reopen rejects foreign slugs, and the wrapper resumes each province
+# from its queue state.
 #
-# Usage: scripts/ontario_refresh.sh [--dry-run] [--force-refresh]
+# Usage: scripts/canada_refresh.sh [--dry-run] [--force-refresh]
 # Env:   APP_REPO, SCRAPER_REPO, STALE_DAYS (7), MIN_RUN_GAP_HOURS (24)
-# Test:  ONTARIO_REFRESH_FORCE_IDLE=1 forces RUNNING=no; keep it out of schedules.
+# Test:  CANADA_REFRESH_FORCE_IDLE=1 forces RUNNING=no; keep it out of schedules.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -28,7 +31,7 @@ DRY_RUN=0
 FORCE_REFRESH=0
 
 usage() {
-  echo "usage: scripts/ontario_refresh.sh [--dry-run] [--force-refresh]" >&2
+  echo "usage: scripts/canada_refresh.sh [--dry-run] [--force-refresh]" >&2
 }
 
 while [ "$#" -gt 0 ]; do
@@ -49,8 +52,10 @@ preflight_fail() {
 [ -d "$APP_REPO" ] || preflight_fail "app repo not found: $APP_REPO"
 [ -d "$SCRAPER_REPO" ] || preflight_fail "scraper repo not found: $SCRAPER_REPO"
 [ -x "$SCRAPER_REPO/.venv313/bin/property-ontario" ] || preflight_fail "property-ontario missing or not executable"
-[ -f "$SCRAPER_REPO/scripts/weekly_run.sh" ] || preflight_fail "weekly_run.sh not found"
-[ -f "$SCRAPER_REPO/regions.ontario.json" ] || preflight_fail "regions.ontario.json not found"
+[ -f "$SCRAPER_REPO/scripts/pull_all_provinces.sh" ] || preflight_fail "pull_all_provinces.sh not found"
+for regions_file in "$SCRAPER_REPO"/regions.ontario.json "$SCRAPER_REPO"/regions.[a-z][a-z].json; do
+  [ -f "$regions_file" ] || preflight_fail "regions file not found: $regions_file"
+done
 [ -f "$APP_REPO/data/listings.json" ] || preflight_fail "data/listings.json not found"
 for tool in python3 npm git; do
   command -v "$tool" >/dev/null 2>&1 || preflight_fail "$tool not on PATH"
@@ -67,9 +72,9 @@ mtime() {
 NOW="$(date -u +%s)"
 
 # A property process matches; this driver's own cmdline ("bash scripts/
-# ontario_refresh.sh") cannot. Test-only override documented above.
+# canada_refresh.sh") cannot. Test-only override documented above.
 RUNNING=no
-if [ "${ONTARIO_REFRESH_FORCE_IDLE:-}" != "1" ]; then
+if [ "${CANADA_REFRESH_FORCE_IDLE:-}" != "1" ]; then
   if pgrep -f property_scraper >/dev/null 2>&1 || pgrep -f property-ontario >/dev/null 2>&1; then
     RUNNING=yes
   fi
@@ -134,13 +139,19 @@ except Exception:
     pending = False
 print("true" if pending else "false")' "$SCRAPER_REPO/data/regions/queue-state.json"
 )"
+REGION_COUNT="$(ls "$SCRAPER_REPO"/regions.ontario.json "$SCRAPER_REPO"/regions.[a-z][a-z].json 2>/dev/null | wc -l | tr -d ' ')"
 SLUGS="$(
-  python3 -c 'import json, sys
-data = json.load(open(sys.argv[1]))
-regions = data["regions"] if isinstance(data, dict) else data
-print(",".join(r["city"] + "-on" for r in regions))' "$SCRAPER_REPO/regions.ontario.json"
-)" || preflight_fail "regions.ontario.json is unreadable"
-[ -n "$SLUGS" ] || preflight_fail "regions.ontario.json has no regions"
+  python3 -c 'import glob, json, os, sys
+out = []
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "regions*.json"))):
+    base = os.path.basename(path)
+    prov = "on" if base == "regions.ontario.json" else base[len("regions."):-len(".json")]
+    data = json.load(open(path))
+    regions = data["regions"] if isinstance(data, dict) else data
+    out.extend(r["city"] + "-" + prov for r in regions)
+print(",".join(out))' "$SCRAPER_REPO"
+)" || preflight_fail "regions files are unreadable"
+[ -n "$SLUGS" ] || preflight_fail "regions files have no regions"
 
 # Decision A: publish only when idle and a settled scrape is newer.
 DO_PUBLISH=0
@@ -174,8 +185,9 @@ else
 fi
 
 report() {
-  echo "ontario_refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "canada_refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "running: $RUNNING"
+  echo "regions: $REGION_COUNT files ($(echo "$SLUGS" | tr ',' '\n' | wc -l | tr -d ' ') slugs)"
   echo "newest_csv: $NEWEST_CSV_DATE (age $NEWEST_CSV_AGE)"
   echo "last_run_started: $LAST_RUN_STARTED"
   echo "publish: $PUBLISH_REPORT"
@@ -198,7 +210,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   fi
   if [ "$DO_REFRESH" -eq 1 ]; then
     REFRESH_REPORT="planned (dry-run)"
-    echo "would run: (cd $SCRAPER_REPO && nohup scripts/weekly_run.sh --reopen \"$SLUGS\" </dev/null >/dev/null 2>&1 &)"
+    echo "would run: (cd $SCRAPER_REPO && nohup scripts/pull_all_provinces.sh </dev/null >/dev/null 2>&1 &)"
   fi
   finish "success" 0
 fi
@@ -222,7 +234,7 @@ if [ "$DO_PUBLISH" -eq 1 ]; then
     echo "publish: no data change"
     PUBLISH_REPORT="skipped"
   else
-    COMMIT_MSG="Refresh Ontario listing dataset ($NEWEST_CSV_DATE scrape)"
+    COMMIT_MSG="Refresh Canada listing dataset ($NEWEST_CSV_DATE scrape)"
     # Pathspec commit: only the two data files enter the commit even if the
     # working tree has unrelated staged edits.
     if ! git -C "$APP_REPO" commit -m "$COMMIT_MSG" -- data/listings.json data/market_summary.json >/dev/null; then
@@ -240,12 +252,12 @@ if [ "$DO_PUBLISH" -eq 1 ]; then
 fi
 
 if [ "$DO_REFRESH" -eq 1 ]; then
-  ( cd "$SCRAPER_REPO" && nohup scripts/weekly_run.sh --reopen "$SLUGS" </dev/null >/dev/null 2>&1 & )
-  # weekly_run.sh may spend ~20s launching the attach Chrome before any scraper
+  ( cd "$SCRAPER_REPO" && nohup scripts/pull_all_provinces.sh </dev/null >/dev/null 2>&1 & )
+  # The wrapper may spend ~20s launching the attach Chrome before any scraper
   # process appears, so confirm on the launcher itself too.
   STARTED=0
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-    if pgrep -f "weekly_run.sh --reopen" >/dev/null 2>&1 ||
+    if pgrep -f "pull_all_provinces.sh" >/dev/null 2>&1 ||
        pgrep -f property-ontario >/dev/null 2>&1 ||
        pgrep -f property_scraper >/dev/null 2>&1; then
       STARTED=1

@@ -189,7 +189,11 @@ describe("searchListings fsa filter", () => {
     expect(searchListings({ city: topCity, fsa: "Z9Z" })).toEqual(empty);
     expect(searchListings({ city: "atlantis", fsa })).toEqual(empty);
 
-    const nullFsaCity = listings.find((row) => row.fsa === null)?.city as string;
+    const nullFsaCity = cities.find(
+      (city) =>
+        listings.some((row) => row.city === city && row.fsa === null) &&
+        listings.some((row) => row.city === city && row.fsa !== null),
+    ) as string;
     const scopedFsa = listings.find((row) => row.city === nullFsaCity && row.fsa !== null)?.fsa as string;
     const scoped = searchListings({ city: nullFsaCity, fsa: scopedFsa, limit: 25 });
     expect(scoped.totalMatches).toBe(
@@ -528,6 +532,31 @@ describe("rankAreas", () => {
 
   it("normalises city aliases like the other tools", () => {
     expect(rankAreas({ city: "St. Catharines" })).toEqual(rankAreas({ city: "st-catharines" }));
+  });
+});
+
+describe("province filter", () => {
+  const topProvince = listings.find((row) => row.city === topCity)?.province as string;
+
+  it("keeps the full result when the province matches the city", () => {
+    expect(searchListings({ city: topCity, province: topProvince.toLowerCase() }).totalMatches).toBe(topCount);
+    expect(citySnapshot({ city: topCity, province: topProvince })).toEqual(citySnapshot(topCity));
+  });
+
+  it("returns empty when the province does not match the city", () => {
+    expect(searchListings({ city: topCity, province: "NU" })).toEqual({
+      totalMatches: 0,
+      returned: 0,
+      listings: [],
+    });
+    expect(citySnapshot({ city: topCity, province: "NU" })).toBeNull();
+  });
+
+  it("coerces the province argument through the tool implementation", () => {
+    expect(TOOL_IMPLS.search_listings({ city: topCity, province: topProvince.toLowerCase() })).toEqual(
+      searchListings({ city: topCity, province: topProvince }),
+    );
+    expect(TOOL_IMPLS.city_snapshot({ city: topCity, province: "nu" })).toBeNull();
   });
 });
 

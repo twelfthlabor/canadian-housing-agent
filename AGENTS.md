@@ -17,12 +17,12 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   scrape tree; `--source <dir>` and `--out <dir>` point elsewhere. Overwrites tracked data, so only run it to refresh.
 - `npm run evals`: live, loads `.env.local` with Node 24, needs `GROQ_API_KEY`, sequential with `EVAL_DELAY_MS` default 2500.
   `MOCK_LLM=1 npm run evals`: plumbing only, no network, exit 0. Flags: `--category`, `--limit`, `--mock`. Writes
-  `evals/report.json` (gitignored). 38 golden cases (16 tool choice including multi-turn MT01-MT04 and capability
-  cases C01/C02, 10 numeric, 12 refusals); live bars: tool 0.9, numeric 0.95, refusal 1.0; mock scores are not a
+  `evals/report.json` (gitignored). 44 golden cases (19 tool choice including multi-turn MT01-MT04 and capability
+  cases C01/C02, 12 numeric, 13 refusals); live bars: tool 0.9, numeric 0.95, refusal 1.0; mock scores are not a
   quality signal. Partial runs cannot satisfy the full quality gate. Multi-turn cases run 2-3 user turns, score only
   the final turn, and require a tool on the first turn; expectations may list `anyOf` alternatives; the report is
   rewritten after each case, so an aborted run keeps partial results. Last completed full-suite pass: the 32-case
-  gate (2026-09-16); the 38-case suite has not completed a live run.
+  gate (2026-09-16); the 44-case suite has not completed a live run.
 
 ## Environment
 
@@ -77,12 +77,12 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   id is never emitted), filter, write `data/listings.json` + `data/market_summary.json`. Default `--source` is the
   sibling `../property-scraper/data/regions`; `--out` defaults to `data/`. `lib/dataset.ts` imports both tracked files
   directly (no database, no runtime reads). No enriched/local export mode exists; don't reintroduce one.
-- Rows in `data/listings.json` are exactly `{city,fsa,price,beds,baths,sqft,seen,address,url}` (19,356 rows, 36
-  cities). Address and source URL are intentionally published; never reintroduce `listing_id`, agent names, or scraped
+- Rows in `data/listings.json` are exactly `{city,province,fsa,price,beds,baths,sqft,seen,address,url}` (35,566 rows, 123
+  cities, 11 provinces). Address and source URL are intentionally published; never reintroduce `listing_id`, agent names, or scraped
   source pages into tracked data. `sqft` outside 200-20,000 is nulled (land acreage bug); per-city `medianSqft` is
   null under 10 samples.
 - `/api/listings` GET serves the Data tab: JSON `{total, returned, listings}` for one city (default limit 100, capped
-  at 200, sorted by price), or `?format=csv` returning all rows as `city,fsa,price,beds,baths,sqft,seen,address,url`
+  at 200, sorted by price), or `?format=csv` returning all rows as `city,province,fsa,price,beds,baths,sqft,seen,address,url`
   (RFC 4180 quoting, formula-looking cells prefixed with `'`, serialized once per server process).
 - Atlas URL state (`components/Workspace.tsx`): city, compare, sort, max, tab, and view are mirrored with one-way
   `replaceState`; defaults are omitted, `max` snaps to the 50k slider step, and unknown params fall back to defaults.

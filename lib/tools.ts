@@ -110,6 +110,12 @@ function finiteOrUndefined(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+/** 2-letter province code, case-insensitive; "" means no filter. */
+function normaliseProvince(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().toUpperCase();
+}
+
 const FSA_RE = /^[A-Z]\d[A-Z]/;
 
 /** Forward sortation area: leading FSA of a full postal code, case-insensitive. */
@@ -167,7 +173,10 @@ function hasFilters(filters: ListingFilters): boolean {
 
 export function searchListings(q: SearchQuery): SearchResult {
   const city = normaliseCity(q?.city);
-  const rows = byCity.get(city) ?? [];
+  const province = normaliseProvince(q?.province);
+  const rows = (byCity.get(city) ?? []).filter(
+    (row) => province === "" || row.province === province,
+  );
   const fsa = normaliseFsa(q?.fsa);
   const minPrice = finiteOrUndefined(q?.minPrice);
   const maxPrice = finiteOrUndefined(q?.maxPrice);
@@ -197,18 +206,22 @@ export function searchListings(q: SearchQuery): SearchResult {
 
 export function citySnapshot(query: SnapshotQuery | string): CitySnapshot | null {
   const city = typeof query === "string" ? query : asString(query?.city);
+  const province = typeof query === "string" ? "" : normaliseProvince(query?.province);
   const fsa = typeof query === "string" ? "" : normaliseFsa(query?.fsa);
   const filters = filtersFrom(typeof query === "string" || !query ? {} : query);
   const key = normaliseCity(city);
   const rows = byCity.get(key);
   if (!rows) return null;
-  if (!fsa && !hasFilters(filters)) {
+  if (!province && !fsa && !hasFilters(filters)) {
     const snapshot = snapshots.get(key);
     if (!snapshot) return null;
     return { ...snapshot, medianByBeds: { ...snapshot.medianByBeds } };
   }
   const scoped = rows.filter(
-    (row) => (!fsa || normaliseFsa(row.fsa) === fsa) && matchesFilters(row, filters),
+    (row) =>
+      (!province || row.province === province) &&
+      (!fsa || normaliseFsa(row.fsa) === fsa) &&
+      matchesFilters(row, filters),
   );
   if (scoped.length === 0) return null;
   return computeSnapshot(key, scoped);
@@ -287,7 +300,7 @@ export const TOOL_SPECS = [
     function: {
       name: "search_listings",
       description:
-        `Search for-sale listings in one Ontario city, optionally filtered by price range, exact bedroom count, and forward sortation area. ` +
+        `Search for-sale listings in one Canadian city, optionally filtered by price range, exact bedroom count, and forward sortation area. ` +
         `Returns the matching listings plus totalMatches (the full count before limit). Sorted by price ascending by default. ` +
         `Use maxPrice when a question is about what a budget can afford. ${NEVER_INVENT}`,
       parameters: {
@@ -296,6 +309,11 @@ export const TOOL_SPECS = [
           city: {
             type: "string",
             description: 'City name, case-insensitive (for example "toronto").',
+          },
+          province: {
+            type: "string",
+            description:
+              'Optional 2-letter province code, case-insensitive (for example "BC"). Narrows results to that province; a code that does not match the city returns no listings.',
           },
           fsa: {
             type: "string",
@@ -338,7 +356,7 @@ export const TOOL_SPECS = [
     function: {
       name: "city_snapshot",
       description:
-        `Get the market snapshot for one Ontario city, optionally scoped to a forward sortation area and filtered by price, bedroom count, and minimum bathrooms: listing count, median price, first/third quartile prices, ` +
+        `Get the market snapshot for one Canadian city, optionally scoped to a forward sortation area and filtered by price, bedroom count, and minimum bathrooms: listing count, median price, first/third quartile prices, ` +
         `median price by bedroom count, share of listings under $1M, and median square footage. ` +
         `Returns null for an unknown city, an unknown forward sortation area, or filters that match no listings. Use this for counts and market statistics; use search_listings for budget or filtered-listing questions. ${NEVER_INVENT}`,
       parameters: {
@@ -347,6 +365,11 @@ export const TOOL_SPECS = [
           city: {
             type: "string",
             description: 'City name, case-insensitive (for example "ottawa").',
+          },
+          province: {
+            type: "string",
+            description:
+              'Optional 2-letter province code, case-insensitive (for example "ON"). Scopes the snapshot to that province; a code that does not match the city returns null.',
           },
           fsa: {
             type: "string",
@@ -438,7 +461,7 @@ export const TOOL_SPECS = [
     function: {
       name: "compare_cities",
       description:
-        `Get market snapshots for several Ontario cities in one call, in the order requested. ` +
+        `Get market snapshots for several Canadian cities in one call, in the order requested. ` +
         `Unknown cities are skipped. ${NEVER_INVENT}`,
       parameters: {
         type: "object",
@@ -475,6 +498,7 @@ export const TOOL_IMPLS: Record<string, (args: any) => unknown> = {
   search_listings: (args: any) =>
     searchListings({
       city: asString(args?.city),
+      province: asString(args?.province),
       fsa: asString(args?.fsa),
       minPrice: asNumber(args?.minPrice),
       maxPrice: asNumber(args?.maxPrice),
@@ -486,6 +510,7 @@ export const TOOL_IMPLS: Record<string, (args: any) => unknown> = {
   city_snapshot: (args: any) =>
     citySnapshot({
       city: asString(args?.city),
+      province: asString(args?.province),
       fsa: asString(args?.fsa),
       minPrice: asNumber(args?.minPrice),
       maxPrice: asNumber(args?.maxPrice),

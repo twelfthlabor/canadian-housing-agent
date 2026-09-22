@@ -46,6 +46,7 @@ def report_number(output: str, label: str) -> int:
 EXPECTED_LISTINGS = [
     {
         "city": "ottawa",
+        "province": "ON",
         "fsa": "K1A",
         "price": 650000,
         "beds": 4,
@@ -57,6 +58,7 @@ EXPECTED_LISTINGS = [
     },
     {
         "city": "ottawa",
+        "province": "ON",
         "fsa": "K1A",
         "price": 500000,
         "beds": 3,
@@ -68,6 +70,7 @@ EXPECTED_LISTINGS = [
     },
     {
         "city": "ottawa",
+        "province": "ON",
         "fsa": "K1P",
         "price": 250000,
         "beds": None,
@@ -79,6 +82,7 @@ EXPECTED_LISTINGS = [
     },
     {
         "city": "toronto",
+        "province": "ON",
         "fsa": "M5C",
         "price": 5000000,
         "beds": None,
@@ -90,6 +94,7 @@ EXPECTED_LISTINGS = [
     },
     {
         "city": "toronto",
+        "province": "ON",
         "fsa": "M5X",
         "price": 2000000,
         "beds": 3,
@@ -101,6 +106,7 @@ EXPECTED_LISTINGS = [
     },
     {
         "city": "toronto",
+        "province": "ON",
         "fsa": "M4N",
         "price": 1200000,
         "beds": 3,
@@ -112,6 +118,7 @@ EXPECTED_LISTINGS = [
     },
     {
         "city": "toronto",
+        "province": "ON",
         "fsa": "M5H",
         "price": 950000,
         "beds": 2,
@@ -123,6 +130,7 @@ EXPECTED_LISTINGS = [
     },
     {
         "city": "toronto",
+        "province": "ON",
         "fsa": "M5V",
         "price": 800000,
         "beds": None,
@@ -134,6 +142,7 @@ EXPECTED_LISTINGS = [
     },
     {
         "city": "toronto",
+        "province": "ON",
         "fsa": None,
         "price": 700000,
         "beds": 1,
@@ -142,6 +151,30 @@ EXPECTED_LISTINGS = [
         "seen": "2026-09-03",
         "address": "70 Bloor St W, Toronto, ON",
         "url": "https://example.com/t7",
+    },
+    {
+        "city": "vancouver",
+        "province": "BC",
+        "fsa": None,
+        "price": 950000,
+        "beds": 2,
+        "baths": 2,
+        "sqft": 850,
+        "seen": "2026-09-20",
+        "address": "10 King St W, Vancouver, BC M5H 1A1",
+        "url": "https://example.com/v2",
+    },
+    {
+        "city": "vancouver",
+        "province": "BC",
+        "fsa": "V6P",
+        "price": 878000,
+        "beds": 2,
+        "baths": 2,
+        "sqft": 846,
+        "seen": "2026-09-20",
+        "address": "6688 Cambie St, Vancouver, BC V6P 0E6",
+        "url": "https://example.com/v1",
     },
 ]
 
@@ -166,27 +199,42 @@ class PipelineEndToEnd(unittest.TestCase):
 
     def test_filter_report_counts(self):
         out = self.proc.stdout
-        self.assertEqual(report_number(out, "rows read"), 17)
-        self.assertEqual(report_number(out, "unique listing_ids"), 14)
-        self.assertEqual(report_number(out, "kept"), 9)
+        self.assertEqual(report_number(out, "rows read"), 20)
+        self.assertEqual(report_number(out, "unique listing_ids"), 17)
+        self.assertEqual(report_number(out, "kept"), 11)
         self.assertEqual(report_number(out, "malformed rows"), 2)
         self.assertEqual(report_number(out, "duplicate listing_id"), 1)
-        self.assertEqual(report_number(out, "non-ON address"), 1)
+        self.assertEqual(report_number(out, "non-CA address"), 2)
         self.assertEqual(report_number(out, "price below 50000"), 1)
         self.assertEqual(report_number(out, "unparseable price"), 1)
         self.assertEqual(report_number(out, "invalid beds/baths"), 2)
         self.assertEqual(report_number(out, "implausible sqft (nulled)"), 2)
-        self.assertEqual(report_number(out, "cities"), 2)
+        self.assertEqual(report_number(out, "fsa/province mismatch (nulled)"), 1)
+        self.assertEqual(report_number(out, "cities"), 3)
 
     def test_listings_sorted_and_transformed(self):
         self.assertEqual(self.listings, EXPECTED_LISTINGS)
         for row in self.listings:
             self.assertEqual(
                 set(row),
-                {"city", "fsa", "price", "beds", "baths", "sqft", "seen", "address", "url"},
+                {"city", "province", "fsa", "price", "beds", "baths", "sqft", "seen", "address", "url"},
             )
             self.assertTrue(row["address"])
             self.assertTrue(row["url"])
+
+    def test_province_comes_from_dir_slug(self):
+        by_url = {row["url"]: row for row in self.listings}
+        self.assertEqual(by_url["https://example.com/o1"]["province"], "ON")
+        self.assertEqual(by_url["https://example.com/t2"]["province"], "ON")
+        self.assertEqual(by_url["https://example.com/v1"]["province"], "BC")
+        self.assertEqual(by_url["https://example.com/v2"]["province"], "BC")
+
+    def test_fsa_mismatch_nulled_not_dropped(self):
+        by_url = {row["url"]: row for row in self.listings}
+        # M5H is an Ontario FSA in a BC directory: kept, but the FSA is nulled.
+        self.assertIsNone(by_url["https://example.com/v2"]["fsa"])
+        self.assertEqual(by_url["https://example.com/v2"]["price"], 950000)
+        self.assertEqual(len(self.listings), 11)
 
     def test_dedupe_keeps_newest_timestamp(self):
         t1 = [row for row in self.listings if row["city"] == "toronto" and row["price"] in (900000, 950000)]
@@ -200,17 +248,20 @@ class PipelineEndToEnd(unittest.TestCase):
         toronto_prices = sorted(row["price"] for row in self.listings if row["city"] == "toronto")
         self.assertEqual(toronto_prices, [700000, 800000, 950000, 1200000, 2000000, 5000000])
         self.assertNotIn(600000, prices)  # malformed short row
+        self.assertNotIn("https://example.com/v3", {row["url"] for row in self.listings})  # US spillover
+        vancouver_prices = sorted(row["price"] for row in self.listings if row["city"] == "vancouver")
+        self.assertEqual(vancouver_prices, [878000, 950000])
 
     def test_implausible_sqft_nulled_not_dropped(self):
         by_price = {row["price"]: row for row in self.listings}
         self.assertIsNone(by_price[5000000]["sqft"])  # 22 (lot acreage)
         self.assertIsNone(by_price[2000000]["sqft"])  # 25000 (non-residential)
-        self.assertEqual(len(self.listings), 9)  # rows survive, only sqft is null
+        self.assertEqual(len(self.listings), 11)  # rows survive, only sqft is null
 
     def test_market_summary(self):
         self.assertEqual(self.summary["source"], "zillow research sample")
         self.assertEqual(self.summary["generated_at"], "2023-11-14T22:13:20Z")
-        self.assertEqual(self.summary["totals"], {"rows": 9, "cities": 2})
+        self.assertEqual(self.summary["totals"], {"rows": 11, "cities": 3, "provinces": 2})
 
         toronto = self.summary["cities"]["toronto"]
         self.assertEqual(toronto["count"], 6)
@@ -236,6 +287,19 @@ class PipelineEndToEnd(unittest.TestCase):
         self.assertEqual(
             ottawa["medianByBeds"],
             {"1": None, "2": None, "3": 500000, "4": 650000, "5+": None},
+        )
+
+        vancouver = self.summary["cities"]["vancouver"]
+        self.assertEqual(vancouver["count"], 2)
+        self.assertEqual(vancouver["medianPrice"], 914000)
+        self.assertEqual(vancouver["q1Price"], 878000)
+        self.assertEqual(vancouver["q3Price"], 950000)
+        self.assertEqual(vancouver["shareUnder1M"], 1)
+        self.assertIsNone(vancouver["medianSqft"])  # only 2 plausible samples
+        self.assertEqual(vancouver["updated"], "2026-09-20")
+        self.assertEqual(
+            vancouver["medianByBeds"],
+            {"1": None, "2": 914000, "3": None, "4": None, "5+": None},
         )
 
     def test_idempotent_across_runs(self):
@@ -291,9 +355,42 @@ class PureHelpers(unittest.TestCase):
         self.assertEqual(MODULE.parse_optional_int("abc", 1, 12), (False, None))
 
     def test_extract_fsa(self):
-        self.assertEqual(MODULE.extract_fsa("20 Queen St, Toronto, ON M4N 2G7"), "M4N")
-        self.assertIsNone(MODULE.extract_fsa("70 Bloor St W, Toronto, ON"))
-        self.assertIsNone(MODULE.extract_fsa("40 Elm St, Buffalo, NY 14201"))
+        self.assertEqual(MODULE.extract_fsa("20 Queen St, Toronto, ON M4N 2G7", "ON"), "M4N")
+        self.assertEqual(MODULE.extract_fsa("6688 Cambie St, Vancouver, BC V6P 0E6", "BC"), "V6P")
+        self.assertIsNone(MODULE.extract_fsa("70 Bloor St W, Toronto, ON", "ON"))
+        self.assertIsNone(MODULE.extract_fsa("40 Elm St, Buffalo, NY 14201", "ON"))
+
+    def test_extract_fsa_province_sanity(self):
+        # An Ontario FSA in a BC directory is a data error: null, never a drop.
+        self.assertIsNone(MODULE.extract_fsa("10 King St W, Vancouver, BC M5H 1A1", "BC"))
+        self.assertEqual(MODULE.extract_fsa("10 King St W, Vancouver, BC M5H 1A1", "ON"), "M5H")
+        # X covers both northern territories; Y is Yukon-only.
+        self.assertEqual(MODULE.extract_fsa("53 Pine Cres, Fort Smith, NT X0E 0P0", "NT"), "X0E")
+        self.assertEqual(MODULE.extract_fsa("53 Pine Cres, Fort Smith, NT X0E 0P0", "NU"), "X0E")
+        self.assertIsNone(MODULE.extract_fsa("53 Pine Cres, Fort Smith, NT X0E 0P0", "YT"))
+
+    def test_dir_slug_parsing(self):
+        self.assertEqual(MODULE.parse_dir_slug("vancouver-bc"), ("vancouver", "BC"))
+        self.assertEqual(MODULE.parse_dir_slug("toronto-on"), ("toronto", "ON"))
+        self.assertEqual(MODULE.parse_dir_slug("chatham-kent-on"), ("chatham-kent", "ON"))
+        self.assertEqual(MODULE.parse_dir_slug("three-rivers-pe"), ("three-rivers", "PE"))
+        self.assertEqual(MODULE.city_from_dir("vancouver-bc"), "vancouver")
+
+    def test_duplicate_city_stem_fails_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "regions"
+            header = "listing_id,address,price,beds,baths,sqft,agent,url,source_page,scraped_at\n"
+            for slug, prov in (("springfield-on", "ON"), ("springfield-bc", "BC")):
+                region = source / slug
+                region.mkdir(parents=True)
+                (region / "listings.csv").write_text(
+                    header
+                    + f'X1,"1 Main St, Springfield, {prov} A1A 1A1",500000,3,2,1200,Agent,https://example.com/x,1,2026-09-01T00:00:00Z\n',
+                    encoding="utf-8",
+                )
+            out = Path(tmp) / "out"
+            with self.assertRaises(RuntimeError):
+                MODULE.build(source, out)
 
     def test_median_and_quartiles(self):
         self.assertEqual(MODULE.median([700000, 800000, 950000, 1200000]), 875000)
@@ -330,6 +427,7 @@ class PureHelpers(unittest.TestCase):
         def row(price, sqft):
             return {
                 "city": "testville",
+                "province": "ON",
                 "fsa": None,
                 "price": price,
                 "beds": 2,

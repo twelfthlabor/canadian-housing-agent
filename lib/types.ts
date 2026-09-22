@@ -1,5 +1,6 @@
 export type Listing = {
   city: string;
+  province: string;
   fsa: string | null;
   price: number;
   beds: number | null;
@@ -28,12 +29,13 @@ export type CitySummary = Omit<CitySnapshot, "city">;
 export type MarketSummary = {
   generated_at: string;
   source: string;
-  totals: { rows: number; cities: number };
+  totals: { rows: number; cities: number; provinces: number };
   cities: Record<string, CitySummary>;
 };
 
 export type SearchQuery = {
   city: string;
+  province?: string;
   fsa?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -44,6 +46,7 @@ export type SearchQuery = {
 
 export type SnapshotQuery = {
   city: string;
+  province?: string;
   fsa?: string;
   minPrice?: number;
   maxPrice?: number;

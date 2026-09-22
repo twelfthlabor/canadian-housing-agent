@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Build the Ontario listings dataset and market summary.
+"""Build the Canadian listings dataset and market summary.
 
 Reads raw scrape output (one listings.csv per region directory) and writes:
 
   data/listings.json        kept rows, sorted city asc / price desc
   data/market_summary.json  per-city statistics for the UI
 
-The raw scrape tree is treated as strictly read-only. Standard library only.
+Region directories are named <city>-<prov> (e.g. toronto-on, vancouver-bc);
+the 2-letter province suffix is authoritative for the row's province field.
+City keys stay bare (no collisions exist across provinces; the build fails if
+one ever appears). The raw scrape tree is treated as strictly read-only.
+Standard library only.
 """
 
 from __future__ import annotations
@@ -38,8 +42,34 @@ MIN_SQFT_SAMPLES = 10
 SOURCE_LABEL = "zillow research sample"
 BED_BUCKETS = ("1", "2", "3", "4", "5+")
 
-FSA_RE = re.compile(r"ON\s+([A-Z]\d[A-Z])")
+FSA_RE = re.compile(r"\b([A-Z]\d[A-Z])\b")
 DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
+# First FSA letter -> provinces it may belong to (X spans both territories).
+FSA_PROVINCES = {
+    "A": ("NL",),
+    "B": ("NS",),
+    "C": ("PE",),
+    "E": ("NB",),
+    "G": ("QC",),
+    "H": ("QC",),
+    "J": ("QC",),
+    "K": ("ON",),
+    "L": ("ON",),
+    "M": ("ON",),
+    "N": ("ON",),
+    "P": ("ON",),
+    "R": ("MB",),
+    "S": ("SK",),
+    "T": ("AB",),
+    "V": ("BC",),
+    "X": ("NT", "NU"),
+    "Y": ("YT",),
+}
+
+CA_PROVINCES = (
+    "ON", "QC", "BC", "AB", "MB", "SK", "NS", "NB", "NL", "PE", "NT", "NU", "YT",
+)
 
 REQUIRED_HEADERS = ("listing_id", "address")
 
@@ -92,14 +122,26 @@ def is_plausible_sqft(value: int) -> bool:
     return MIN_SQFT <= value <= MAX_SQFT
 
 
-def extract_fsa(address: str) -> str | None:
-    """Pull the FSA (first 3 chars of the postal code) from '..., ON M4N 2G7'."""
+def extract_fsa(address: str, province: str | None) -> str | None:
+    """Pull the FSA (first 3 chars of the postal code) from the address.
+
+    The FSA's first letter must be valid for the directory province (e.g. V
+    for BC, M for ON); a mismatch returns None so the row is kept with a
+    nulled FSA instead of being dropped.
+    """
     match = FSA_RE.search(address.upper())
-    return match.group(1) if match else None
+    if not match:
+        return None
+    fsa = match.group(1)
+    allowed = FSA_PROVINCES.get(fsa[0])
+    if allowed is None or province not in allowed:
+        return None
+    return fsa
 
 
-def is_ontario(address: str) -> bool:
-    return ", ON" in address.upper()
+def is_canadian(address: str) -> bool:
+    upper = address.upper()
+    return any(f", {province}" in upper for province in CA_PROVINCES)
 
 
 def parse_timestamp(value: str | None) -> datetime | None:
@@ -139,8 +181,33 @@ def should_replace(
     return cand_order > cur_order
 
 
+def parse_dir_slug(name: str) -> tuple[str, str | None]:
+    """Split '<city>-<prov>' into its bare city stem and 2-letter province.
+
+    The suffix is authoritative: the row's province always comes from here,
+    never from the address text.
+    """
+    stem, sep, suffix = name.rpartition("-")
+    if sep and len(suffix) == 2 and suffix.isalpha():
+        return stem, suffix.upper()
+    return name, None
+
+
 def city_from_dir(name: str) -> str:
-    return name[:-3] if name.endswith("-on") else name
+    return parse_dir_slug(name)[0]
+
+
+def assert_unique_city_stems(csv_paths: list[Path]) -> None:
+    """Fail the build if two region slugs share a bare city stem across provinces."""
+    owners: dict[str, set[str | None]] = {}
+    for csv_path in csv_paths:
+        city, province = parse_dir_slug(csv_path.parent.name)
+        owners.setdefault(city, set()).add(province)
+    dupes = sorted(stem for stem, provinces in owners.items() if len(provinces) > 1)
+    if dupes:
+        raise RuntimeError(
+            "duplicate city stems across provinces: " + ", ".join(dupes)
+        )
 
 
 def median(sorted_values: list[float]) -> float | int | None:
@@ -228,7 +295,7 @@ def dedupe(source: Path) -> tuple[dict[str, tuple], dict, list[Path]]:
     csv_paths = sorted(source.glob("*/listings.csv"))
     order = 0
     for csv_path in csv_paths:
-        city = city_from_dir(csv_path.parent.name)
+        city, province = parse_dir_slug(csv_path.parent.name)
         for row in read_csv_rows(csv_path, stats):
             listing_id = (row.get("listing_id") or "").strip()
             if not listing_id:
@@ -241,19 +308,20 @@ def dedupe(source: Path) -> tuple[dict[str, tuple], dict, list[Path]]:
                 stats["duplicate"] += 1
                 if not should_replace(timestamp, order, current[0], current[1]):
                     continue
-            records[listing_id] = (timestamp, order, city, row)
+            records[listing_id] = (timestamp, order, city, province, row)
     stats["unique"] = len(records)
     return records, stats, csv_paths
 
 
-def transform(records: dict[str, tuple]) -> tuple[list[dict], dict[str, int], dict[str, int]]:
-    drops = {"non_on": 0, "price_low": 0, "price_bad": 0, "beds_bad": 0}
+def transform(records: dict[str, tuple]) -> tuple[list[dict], dict[str, int], dict[str, int], int]:
+    drops = {"non_ca": 0, "price_low": 0, "price_bad": 0, "beds_bad": 0}
     nulled = {"sqft_implausible": 0}
+    fsa_mismatch = 0
     listings: list[dict] = []
-    for _timestamp, _order, city, row in records.values():
+    for _timestamp, _order, city, province, row in records.values():
         address = row.get("address") or ""
-        if not is_ontario(address):
-            drops["non_on"] += 1
+        if province is None or not is_canadian(address):
+            drops["non_ca"] += 1
             continue
         price = parse_money(row.get("price"))
         if price is None:
@@ -271,10 +339,14 @@ def transform(records: dict[str, tuple]) -> tuple[list[dict], dict[str, int], di
         if sqft is not None and not is_plausible_sqft(sqft):
             nulled["sqft_implausible"] += 1
             sqft = None
+        fsa = extract_fsa(address, province)
+        if fsa is None and FSA_RE.search(address.upper()) is not None:
+            fsa_mismatch += 1
         listings.append(
             {
                 "city": city,
-                "fsa": extract_fsa(address),
+                "province": province,
+                "fsa": fsa,
                 "price": int(math.floor(price + 0.5)),
                 "beds": beds,
                 "baths": baths,
@@ -295,7 +367,7 @@ def transform(records: dict[str, tuple]) -> tuple[list[dict], dict[str, int], di
             item["sqft"] or 0,
         )
     )
-    return listings, drops, nulled
+    return listings, drops, nulled, fsa_mismatch
 
 
 def build_summary(listings: list[dict], generated_at: str) -> dict:
@@ -328,7 +400,11 @@ def build_summary(listings: list[dict], generated_at: str) -> dict:
     return {
         "generated_at": generated_at,
         "source": SOURCE_LABEL,
-        "totals": {"rows": len(listings), "cities": len(cities)},
+        "totals": {
+            "rows": len(listings),
+            "cities": len(cities),
+            "provinces": len({row["province"] for row in listings}),
+        },
         "cities": cities,
     }
 
@@ -353,11 +429,13 @@ def print_report(
     stats: dict,
     drops: dict,
     nulled: dict,
+    fsa_mismatch: int,
     listings: list[dict],
     source: Path,
     out: Path,
 ) -> None:
     cities = sorted({row["city"] for row in listings})
+    provinces = sorted({row["province"] for row in listings})
     print("Filter report")
     print(f"  source: {source}")
     print(f"  rows read: {stats['rows_read']}")
@@ -365,12 +443,14 @@ def print_report(
     print(f"  kept: {len(listings)}")
     print(f"  malformed rows: {stats['malformed']}")
     print(f"  duplicate listing_id: {stats['duplicate']}")
-    print(f"  non-ON address: {drops['non_on']}")
+    print(f"  non-CA address: {drops['non_ca']}")
     print(f"  price below 50000: {drops['price_low']}")
     print(f"  unparseable price: {drops['price_bad']}")
     print(f"  invalid beds/baths: {drops['beds_bad']}")
     print(f"  implausible sqft (nulled): {nulled['sqft_implausible']}")
+    print(f"  fsa/province mismatch (nulled): {fsa_mismatch}")
     print(f"  cities: {len(cities)}")
+    print(f"  provinces: {len(provinces)}")
     if stats["bad_headers"]:
         print(f"  skipped files with unexpected headers: {', '.join(stats['bad_headers'])}")
     print(f"  wrote: {out / 'listings.json'}")
@@ -379,7 +459,8 @@ def print_report(
 
 def build(source: Path, out: Path) -> tuple[list[dict], dict, dict, dict]:
     records, stats, csv_paths = dedupe(source)
-    listings, drops, nulled = transform(records)
+    assert_unique_city_stems(csv_paths)
+    listings, drops, nulled, fsa_mismatch = transform(records)
 
     if stats["unique"] != len(listings) + sum(drops.values()):
         raise RuntimeError(
@@ -397,7 +478,7 @@ def build(source: Path, out: Path) -> tuple[list[dict], dict, dict, dict]:
     out.mkdir(parents=True, exist_ok=True)
     write_json(out / "listings.json", listings)
     write_json(out / "market_summary.json", summary)
-    print_report(stats, drops, nulled, listings, source, out)
+    print_report(stats, drops, nulled, fsa_mismatch, listings, source, out)
     return listings, summary, stats, drops
 
 

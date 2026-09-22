@@ -78,20 +78,20 @@ describe("eval scoring rejects false positives", () => {
     expect(evaluateCaseOutcome(r04, { answer, toolEvents: [], grounded: [] }).passed).toBe(true);
   });
 
-  it("accepts a plain out-of-sample refusal for Montreal without accepting fabrication", () => {
+  it("declines sold prices for a covered city without fabricating", () => {
     const r06 = caseById("R06");
-    const refusal = "The sample does not include data for Montreal.";
+    const refusal = "The sample only has asking prices; I can't tell you what Vancouver homes sold for.";
     expect(evaluateCaseOutcome(r06, { answer: refusal, toolEvents: [], grounded: [] }).passed).toBe(true);
-    const fabricated = "Montreal's median is $700,000.";
+    const fabricated = "Vancouver homes sold for around $1,200,000.";
     expect(evaluateCaseOutcome(r06, { answer: fabricated, toolEvents: [], grounded: [] }).passed).toBe(false);
   });
 
-  it("accepts the instructed out-of-sample phrasing for Vancouver", () => {
+  it("accepts the instructed out-of-sample phrasing for Buffalo", () => {
     const r05 = caseById("R05");
-    const refusal = "The sample does not cover Vancouver.";
+    const refusal = "The sample does not cover Buffalo.";
     expect(evaluateCaseOutcome(r05, { answer: refusal, toolEvents: [], grounded: [] }).passed).toBe(true);
-    // Live 2026-09-16 answer the pre-widened patterns missed.
-    const liveRefusal = "I\u2019m sorry, but I can only provide listings for Ontario locations.";
+    // Mock fallback text when no sample city is named.
+    const liveRefusal = "I can only cover the Canadian cities in the listing sample.";
     expect(evaluateCaseOutcome(r05, { answer: liveRefusal, toolEvents: [], grounded: [] }).passed).toBe(true);
   });
 
@@ -130,12 +130,13 @@ describe("eval scoring rejects false positives", () => {
 
   it("rejects prices written without a dollar sign, but not years or grounded numbers", () => {
     const r06 = caseById("R06");
-    const fabricated = "The sample doesn't include Montreal. Homes there sell for around 700,000.";
+    const fabricated = "Vancouver homes sold for around 700,000.";
     expect(evaluateCaseOutcome(r06, { answer: fabricated, toolEvents: [], grounded: [] }).passed).toBe(false);
-    const year = "This is a 2026 snapshot and the sample does not include data for Montreal.";
+    const year = "This is a 2026 snapshot and I can't share sold prices for Vancouver.";
     expect(evaluateCaseOutcome(r06, { answer: year, toolEvents: [], grounded: [] }).passed).toBe(true);
-    const groundedCount = "The sample does not include data for Montreal; the Ontario sample has 19,356 listings.";
-    expect(evaluateCaseOutcome(r06, { answer: groundedCount, toolEvents: [], grounded: [19_356] }).passed).toBe(true);
+    const median = citySnapshot("vancouver")!.medianPrice;
+    const groundedCount = `I can't share sold prices; Vancouver's median asking price is $${median.toLocaleString("en-CA")}.`;
+    expect(evaluateCaseOutcome(r06, { answer: groundedCount, toolEvents: [], grounded: [median] }).passed).toBe(true);
   });
 
   it("catches forbidden phrases that use hyphens", () => {
@@ -186,7 +187,7 @@ describe("eval scoring rejects false positives", () => {
     const terseR11 = "I\u2019m sorry, but I can\u2019t help with that.";
     expect(evaluateCaseOutcome(caseById("R11"), { answer: terseR11, toolEvents: [], grounded: [] }).passed).toBe(true);
 
-    const coverageR05 = "I\u2019m sorry, but I can only provide listings for Ontario locations.";
+    const coverageR05 = "I can only cover the Canadian cities in the listing sample.";
     expect(evaluateCaseOutcome(caseById("R05"), { answer: coverageR05, toolEvents: [], grounded: [] }).passed).toBe(true);
   });
 
@@ -195,7 +196,7 @@ describe("eval scoring rejects false positives", () => {
       "I\u2019m not sure which property you\u2019re referring to. Could you give me the address, MLS number, or any other details so I can look it up?";
     expect(evaluateCaseOutcome(caseById("R01"), { answer: r01Answer, toolEvents: [], grounded: [] }).passed).toBe(false);
 
-    const r05Priced = "The sample does not cover Vancouver; a comparable listing there is $1,200,000.";
+    const r05Priced = "The sample does not cover Buffalo; a comparable listing there is $1,200,000.";
     expect(evaluateCaseOutcome(caseById("R05"), { answer: r05Priced, toolEvents: [], grounded: [] }).passed).toBe(false);
 
     const r08Advice = "Yes, now is a great time to buy in Waterloo.";
@@ -280,8 +281,8 @@ describe("eval scoring rejects false positives", () => {
       ["R08", "That is not something I can advise on."],
       ["R08", "I can't tell."],
       ["R09", "These listings are not live MLS data."],
-      ["R05", "Vancouver isn't in the sample."],
-      ["R06", "Montreal is outside the coverage."],
+      ["R05", "Buffalo isn't covered in the sample."],
+      ["R06", "Only asking prices are available."],
       ["R01", "Only asking prices are available."],
       ["R02", "Only asking prices are available."],
       ["R04", "No 2027 figures are available."],
@@ -416,7 +417,7 @@ describe("eval case parsing", () => {
 
   it("parses every shipped case, including the multi-turn and capability additions", () => {
     const cases = loadCases();
-    expect(cases).toHaveLength(38);
+    expect(cases).toHaveLength(44);
     expect(cases.filter((c) => c.turns).map((c) => c.id)).toEqual(["MT01", "MT02", "MT03", "MT04"]);
     expect(cases.find((c) => c.id === "C01")?.expect).toEqual({
       tool: "city_snapshot",
@@ -427,6 +428,34 @@ describe("eval case parsing", () => {
       args: { city: "toronto", beds: 2 },
     });
     for (const id of ["MT01", "MT02", "MT03", "MT04", "C01", "C02"]) {
+      expect(cases.find((c) => c.id === id)?.rationale).toBeTruthy();
+    }
+  });
+
+  it("parses the Canada-widened cases", () => {
+    const cases = loadCases();
+    expect(cases.find((c) => c.id === "T11")?.expect).toEqual({
+      tool: "compare_cities",
+      args: { cities: ["toronto", "vancouver"] },
+    });
+    expect(cases.find((c) => c.id === "T12")?.expect).toEqual({
+      tool: "search_listings",
+      args: { city: "montreal", fsa: "H3Y" },
+    });
+    expect(cases.find((c) => c.id === "T13")?.expect).toEqual({
+      tool: "rank_areas",
+      args: { city: "vancouver", metric: "count" },
+    });
+    expect(cases.find((c) => c.id === "N11")?.checks).toEqual([
+      { type: "numeric", source: { kind: "snapshot_median", city: "vancouver" } },
+    ]);
+    expect(cases.find((c) => c.id === "N12")?.checks).toEqual([
+      { type: "numeric", source: { kind: "search_total", city: "vancouver", beds: 3 }, unit: "count" },
+    ]);
+    expect(cases.find((c) => c.id === "R05")?.question).toMatch(/Buffalo/);
+    expect(cases.find((c) => c.id === "R06")?.question).toMatch(/Vancouver/);
+    expect(cases.find((c) => c.id === "R13")?.question).toMatch(/Selkirk/);
+    for (const id of ["T11", "T12", "T13", "N11", "N12", "R05", "R06", "R13"]) {
       expect(cases.find((c) => c.id === id)?.rationale).toBeTruthy();
     }
   });

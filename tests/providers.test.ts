@@ -72,7 +72,7 @@ describe("mock provider", () => {
 
   it("answers off-sample questions without calling the sample sanitized", async () => {
     const text = textOf(await collect(createMockProvider()));
-    expect(text).toContain("Ontario");
+    expect(text).toContain("Canadian");
     expect(text.toLowerCase()).not.toContain("sanitized");
   });
 });

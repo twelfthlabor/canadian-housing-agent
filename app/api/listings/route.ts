@@ -23,10 +23,10 @@ export function csvCell(value: string | number | null): string {
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-const CSV_HEADER = "city,fsa,price,beds,baths,sqft,seen,address,url";
+const CSV_HEADER = "city,province,fsa,price,beds,baths,sqft,seen,address,url";
 
 export const csvRow = (row: Listing): string =>
-  [row.city, row.fsa, row.price, row.beds, row.baths, row.sqft, row.seen, row.address ?? "", row.url ?? ""]
+  [row.city, row.province, row.fsa, row.price, row.beds, row.baths, row.sqft, row.seen, row.address ?? "", row.url ?? ""]
     .map(csvCell)
     .join(",");
 

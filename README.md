@@ -1,7 +1,7 @@
 # Ontario Housing Agent
 
 A free public demo where visitors chat with a tool-calling LLM agent about a
-research sample of 19,356 Ontario for-sale listings across 36 cities. The agent
+research sample of 35,566 Canadian for-sale listings across 123 cities in 11 provinces. The agent
 answers questions like "median asking price for a 3-bed in Hamilton?" or "how
 many listings are in M6P?" by calling deterministic search and stats functions
 over a JSON dataset. Numbers come from those functions; the model picks tools
@@ -48,9 +48,9 @@ without `MOCK_LLM=1`. The app shows an offline-demo notice when using scripted r
 Both Next.js and `npm run evals` load `.env.local`; exported environment variables
 take precedence for the eval command. Restart the server after changing providers or data.
 
-`npm run evals` runs the 38 golden cases (16 tool choice, including 4
+`npm run evals` runs the 44 golden cases (19 tool choice, including 4
 multi-turn cases and 2 capability cases for filtered snapshots and area
-rankings; 10 numeric; 12 refusals) and needs `GROQ_API_KEY` for live scoring;
+rankings plus 3 Canada tool cases; 12 numeric; 13 refusals) and needs `GROQ_API_KEY` for live scoring;
 without a key it exits 1 with instructions. `MOCK_LLM=1 npm run evals` runs the
 plumbing only. Each run writes `evals/report.json`, which is gitignored, and
 the harness updates it after every case so an aborted run keeps partial
@@ -58,7 +58,7 @@ results. Reports include the answers and tool arguments for diagnosis. Live
 bars: tool choice >= 0.90, numeric >= 0.95, refusals 1.00. `quality_gate_passed`
 stays false for mock runs and partial runs (`--limit` or `--category` selecting
 fewer than all cases), even if their selected cases pass. The last completed
-full live pass is the 32-case gate from 2026-09-16; the 38-case suite has not
+full live pass is the 32-case gate from 2026-09-16; the 44-case suite has not
 completed a live run (2026-09-17 attempts hit the Groq free-tier daily token
 cap).
 
@@ -83,10 +83,10 @@ property-scraper/  (separate repo; read-only here)
   data/regions/<city>/listings.csv
         |
         v
-pipeline/build_dataset.py   dedupe by listing id -> filter -> extract FSA -> write nine fields
+pipeline/build_dataset.py   dedupe by listing id -> filter -> extract FSA -> write ten fields
         |
         v
-data/listings.json          19,356 listings incl. address + source URL
+data/listings.json          35,566 listings incl. province, address + source URL
 data/market_summary.json    per-city aggregates
         |
         v

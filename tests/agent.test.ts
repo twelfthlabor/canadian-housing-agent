@@ -121,7 +121,7 @@ describe("mock-provider agent turns (no network)", () => {
     const events = await collect("Hello there, what can you do?");
 
     expect(toolOf(events)).toBeUndefined();
-    expect(textOf(events)).toContain("Ontario");
+    expect(textOf(events)).toContain("Canadian");
     expect(events[events.length - 1]).toEqual({ type: "done" });
   });
 

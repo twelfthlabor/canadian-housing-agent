@@ -429,7 +429,7 @@ export default function Chat({ offline, draft }: { offline: boolean; draft: { te
       {error ? <p className="error" ref={errorRef} role="alert">{error}</p> : null}
       <form className="composer" ref={composerRef} onSubmit={event => { event.preventDefault(); void send(input); }}>
         <label className="sr-only" htmlFor="question">Your question</label>
-        <textarea ref={inputRef} autoComplete="off" id="question" rows={3} maxLength={4000} placeholder="Ask about Ontario housing…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(input); } }} />
+        <textarea ref={inputRef} autoComplete="off" id="question" rows={3} maxLength={4000} placeholder="Ask about Canadian housing…" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(input); } }} />
         <div className="composer-bottom"><span>From the research sample</span><button type="submit" aria-label={busy ? "Thinking" : "Send question"} disabled={busy || !input.trim()}><Icon name="send" /></button></div>
       </form>
       <p className="composer-hint">Enter to send · Shift + Enter for a new line</p>
