@@ -37,7 +37,7 @@ The questions run about 90 seconds. Then show the affordances:
 2. Listing links: scroll the cards from question 2 and open one "View listing"
    link in a new tab, then close it.
 3. Data tab: in the atlas, open Data, switch the city, and click
-   "Download CSV · 19,356 rows". The file is the full published snapshot.
+   "Download CSV · 35,566 rows". The file is the full published snapshot.
 4. Shareable URL: change the city, sort, or price ceiling, then copy the
    address bar into the second tab. City, compare pair, sort, price ceiling,
    tab, and view are restored. Back and forward do not resync the view.

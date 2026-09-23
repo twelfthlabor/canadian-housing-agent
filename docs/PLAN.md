@@ -1,7 +1,7 @@
 # Plan
 
 Milestones, architecture details, free-tier constraints, and known risks for the
-Ontario Housing Agent demo. For the dataset itself, see [DATA.md](DATA.md).
+Canadian Housing Agent demo. For the dataset itself, see [DATA.md](DATA.md).
 
 ## What the demo does
 

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Canada Housing Atlas | Housing Agent",
+  title: "Canadian Housing Agent | Canada Housing Atlas",
   description:
     "Explore Canadian asking prices on an interactive city atlas. Compare cities and ask questions about the research sample.",
 };

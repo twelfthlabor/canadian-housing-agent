@@ -1,5 +1,5 @@
 /**
- * Golden eval harness for the Ontario Housing Agent.
+ * Golden eval harness for the Canadian Housing Agent.
  *
  * Entry point: `runAgent()` from lib/agent.ts — the same async generator the
  * SSE route (app/api/chat/route.ts) consumes. The harness feeds it a provider
@@ -180,7 +180,7 @@ function parseFlags(argv: string[]): Flags {
 }
 
 function usage(): void {
-  console.log(`Golden eval harness for the Ontario Housing Agent.
+  console.log(`Golden eval harness for the Canadian Housing Agent.
 
   MOCK_LLM=1 npm run evals                     plumbing-only, no network, exit 0
   npm run evals                                live, needs GROQ_API_KEY
@@ -858,10 +858,10 @@ async function main(): Promise<number> {
   const startedAt = new Date();
 
   if (isMock) {
-    console.log(`Ontario Housing Agent evals — mode: mock (plumbing-only, no network)`);
+    console.log(`Canadian Housing Agent evals — mode: mock (plumbing-only, no network)`);
   } else {
     console.log(
-      `Ontario Housing Agent evals — mode: live provider=${provider.name}, sequential, ${delayMs}ms between cases`,
+      `Canadian Housing Agent evals — mode: live provider=${provider.name}, sequential, ${delayMs}ms between cases`,
     );
   }
   console.log(

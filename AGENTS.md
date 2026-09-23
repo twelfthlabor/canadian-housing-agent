@@ -1,4 +1,4 @@
-# AGENTS.md: Ontario Housing Agent
+# AGENTS.md: Canadian Housing Agent
 
 Operating notes for coding agents. Quickstart, architecture, and dataset docs
 live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.

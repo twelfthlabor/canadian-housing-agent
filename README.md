@@ -1,4 +1,4 @@
-# Ontario Housing Agent
+# Canadian Housing Agent
 
 A free public demo where visitors chat with a tool-calling LLM agent about a
 research sample of 35,566 Canadian for-sale listings across 123 cities in 11 provinces. The agent

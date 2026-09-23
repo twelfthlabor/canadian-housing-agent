@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-09-22T17:40:34Z",
+  "generated_at": "2026-09-23T06:54:35Z",
   "source": "zillow research sample",
   "totals": {
-    "rows": 35566,
+    "rows": 42888,
     "cities": 123,
     "provinces": 11
   },
@@ -24,20 +24,20 @@
       "updated": "2026-09-20"
     },
     "airdrie": {
-      "count": 110,
-      "medianPrice": 575499.5,
-      "q1Price": 459900,
-      "q3Price": 725000,
+      "count": 486,
+      "medianPrice": 569900,
+      "q1Price": 445000,
+      "q3Price": 699000,
       "medianByBeds": {
-        "1": 194900,
-        "2": 289950,
-        "3": 507495,
-        "4": 672450,
-        "5+": 774950
+        "1": 226250,
+        "2": 299999,
+        "3": 515000,
+        "4": 657050,
+        "5+": 775000
       },
-      "shareUnder1M": 0.973,
-      "medianSqft": 1683.5,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.969,
+      "medianSqft": 1618,
+      "updated": "2026-09-23"
     },
     "ajax": {
       "count": 237,
@@ -56,20 +56,20 @@
       "updated": "2026-09-17"
     },
     "amherst": {
-      "count": 63,
+      "count": 65,
       "medianPrice": 249900,
-      "q1Price": 187500,
+      "q1Price": 193250,
       "q3Price": 369900,
       "medianByBeds": {
         "1": null,
         "2": null,
         "3": 249000,
         "4": 327450,
-        "5+": 339900
+        "5+": 319900
       },
       "shareUnder1M": 1,
       "medianSqft": 1515,
-      "updated": "2026-09-22"
+      "updated": "2026-09-23"
     },
     "antigonish": {
       "count": 33,
@@ -104,20 +104,20 @@
       "updated": "2026-09-17"
     },
     "bathurst": {
-      "count": 62,
-      "medianPrice": 237450,
+      "count": 63,
+      "medianPrice": 239900,
       "q1Price": 174900,
       "q3Price": 399900,
       "medianByBeds": {
         "1": 267499.5,
         "2": 174900,
         "3": 262400,
-        "4": 299500,
+        "4": 299000,
         "5+": 172900
       },
       "shareUnder1M": 0.952,
-      "medianSqft": 1792,
-      "updated": "2026-09-22"
+      "medianSqft": 1805,
+      "updated": "2026-09-23"
     },
     "belleville": {
       "count": 315,
@@ -168,35 +168,35 @@
       "updated": "2026-09-17"
     },
     "bridgewater": {
-      "count": 61,
-      "medianPrice": 385000,
-      "q1Price": 230900,
-      "q3Price": 536950,
+      "count": 63,
+      "medianPrice": 399900,
+      "q1Price": 238900,
+      "q3Price": 534900,
       "medianByBeds": {
         "1": 249900,
         "2": 319900,
-        "3": 450000,
-        "4": 479999,
+        "3": 462500,
+        "4": 439999.5,
         "5+": 494000
       },
       "shareUnder1M": 1,
-      "medianSqft": 1452,
-      "updated": "2026-09-22"
+      "medianSqft": 1460,
+      "updated": "2026-09-23"
     },
     "brossard": {
-      "count": 23,
-      "medianPrice": 1189000,
-      "q1Price": 599000,
-      "q3Price": 2015000,
+      "count": 6,
+      "medianPrice": 1857000,
+      "q1Price": 949000,
+      "q3Price": 2586000,
       "medianByBeds": {
-        "1": 497000,
-        "2": 699000,
-        "3": 1599000,
+        "1": null,
+        "2": 675000,
+        "3": null,
         "4": 1207000,
-        "5+": 2249000
+        "5+": 2586000
       },
-      "shareUnder1M": 0.478,
-      "medianSqft": 762.5,
+      "shareUnder1M": 0.333,
+      "medianSqft": null,
       "updated": "2026-09-22"
     },
     "burlington": {
@@ -232,20 +232,20 @@
       "updated": "2026-09-20"
     },
     "calgary": {
-      "count": 301,
-      "medianPrice": 689900,
-      "q1Price": 499973,
-      "q3Price": 999900,
+      "count": 959,
+      "medianPrice": 650000,
+      "q1Price": 475000,
+      "q3Price": 1008000,
       "medianByBeds": {
-        "1": 236450,
-        "2": 399900,
-        "3": 529900,
-        "4": 762000,
-        "5+": 998000
+        "1": 224900,
+        "2": 368000,
+        "3": 546399,
+        "4": 828888,
+        "5+": 1039000
       },
-      "shareUnder1M": 0.754,
-      "medianSqft": 1513,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.75,
+      "medianSqft": 1504,
+      "updated": "2026-09-23"
     },
     "cambridge": {
       "count": 500,
@@ -328,36 +328,36 @@
       "updated": "2026-09-20"
     },
     "cochrane": {
-      "count": 72,
-      "medianPrice": 557400,
-      "q1Price": 442400,
-      "q3Price": 772450,
+      "count": 301,
+      "medianPrice": 564900,
+      "q1Price": 459900,
+      "q3Price": 727500,
       "medianByBeds": {
-        "1": 265000,
-        "2": 344000,
-        "3": 539974.5,
-        "4": 759900,
-        "5+": 819900
+        "1": 277450,
+        "2": 349750,
+        "3": 539450,
+        "4": 744950,
+        "5+": 839450
       },
-      "shareUnder1M": 0.986,
-      "medianSqft": 1574.5,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.97,
+      "medianSqft": 1571.5,
+      "updated": "2026-09-23"
     },
     "conception-bay-south": {
-      "count": 27,
-      "medianPrice": 399900,
-      "q1Price": 195000,
-      "q3Price": 599900,
+      "count": 119,
+      "medianPrice": 249900,
+      "q1Price": 179900,
+      "q3Price": 549900,
       "medianByBeds": {
         "1": null,
-        "2": 549900,
-        "3": 592400,
-        "4": 412450,
-        "5+": 4999000
+        "2": 389900,
+        "3": 549900,
+        "4": 609900,
+        "5+": 537450
       },
-      "shareUnder1M": 0.963,
-      "medianSqft": 2067.5,
-      "updated": "2026-09-22"
+      "shareUnder1M": 0.958,
+      "medianSqft": 2200,
+      "updated": "2026-09-23"
     },
     "coquitlam": {
       "count": 820,
@@ -392,20 +392,20 @@
       "updated": "2026-09-22"
     },
     "cornwall": {
-      "count": 52,
-      "medianPrice": 319900,
-      "q1Price": 187400,
-      "q3Price": 519900,
+      "count": 86,
+      "medianPrice": 174900,
+      "q1Price": 119000,
+      "q3Price": 455000,
       "medianByBeds": {
         "1": 199990,
         "2": 319900,
-        "3": 469500,
+        "3": 439950,
         "4": 578950,
         "5+": 679499.5
       },
-      "shareUnder1M": 0.981,
-      "medianSqft": 1897.5,
-      "updated": "2026-09-22"
+      "shareUnder1M": 0.988,
+      "medianSqft": 1895,
+      "updated": "2026-09-23"
     },
     "delta": {
       "count": 720,
@@ -440,52 +440,52 @@
       "updated": "2026-09-22"
     },
     "edmonton": {
-      "count": 54,
-      "medianPrice": 494900,
-      "q1Price": 409900,
-      "q3Price": 599900,
+      "count": 837,
+      "medianPrice": 459900,
+      "q1Price": 321250,
+      "q3Price": 619850,
       "medianByBeds": {
-        "1": null,
-        "2": 234900,
-        "3": 489900,
-        "4": 479500,
-        "5+": 674900
+        "1": 167450,
+        "2": 229900,
+        "3": 399900,
+        "4": 499000,
+        "5+": 599965
       },
-      "shareUnder1M": 0.944,
-      "medianSqft": 1619.5,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.9,
+      "medianSqft": 1400.5,
+      "updated": "2026-09-23"
     },
     "edmundston": {
-      "count": 60,
+      "count": 62,
       "medianPrice": 275000,
-      "q1Price": 178700,
-      "q3Price": 382450,
+      "q1Price": 177500,
+      "q3Price": 380000,
       "medianByBeds": {
         "1": null,
-        "2": 219900,
-        "3": 280000,
+        "2": 222400,
+        "3": 275000,
         "4": 367000,
         "5+": 484499.5
       },
-      "shareUnder1M": 0.95,
-      "medianSqft": 1555,
-      "updated": "2026-09-22"
+      "shareUnder1M": 0.952,
+      "medianSqft": 1445,
+      "updated": "2026-09-23"
     },
     "estevan": {
-      "count": 11,
-      "medianPrice": 239000,
+      "count": 44,
+      "medianPrice": 244450,
       "q1Price": 150000,
-      "q3Price": 389900,
+      "q3Price": 330000,
       "medianByBeds": {
-        "1": null,
-        "2": 179500,
-        "3": 264000,
-        "4": 495000,
+        "1": 69900,
+        "2": 158250,
+        "3": 244450,
+        "4": 335000,
         "5+": 389900
       },
       "shareUnder1M": 1,
-      "medianSqft": 1362.5,
-      "updated": "2026-09-20"
+      "medianSqft": 1162,
+      "updated": "2026-09-23"
     },
     "fort-smith": {
       "count": 1,
@@ -536,20 +536,20 @@
       "updated": "2026-09-22"
     },
     "gatineau": {
-      "count": 16,
-      "medianPrice": 768999,
-      "q1Price": 272500,
-      "q3Price": 1489000,
+      "count": 31,
+      "medianPrice": 579900,
+      "q1Price": 409000,
+      "q3Price": 1150000,
       "medianByBeds": {
-        "1": 267400,
-        "2": 409000,
-        "3": 949450,
+        "1": 269950,
+        "2": 514900,
+        "3": 879900,
         "4": 1679000,
-        "5+": 2049500
+        "5+": 2799000
       },
-      "shareUnder1M": 0.625,
+      "shareUnder1M": 0.742,
       "medianSqft": null,
-      "updated": "2026-09-20"
+      "updated": "2026-09-23"
     },
     "glace-bay": {
       "count": 57,
@@ -568,36 +568,36 @@
       "updated": "2026-09-22"
     },
     "grand-falls-windsor": {
-      "count": 47,
-      "medianPrice": 279900,
+      "count": 48,
+      "medianPrice": 279450,
       "q1Price": 169900,
-      "q3Price": 489000,
+      "q3Price": 483000,
       "medianByBeds": {
         "1": 139900,
         "2": 254900,
-        "3": 289450,
+        "3": 279900,
         "4": 299000,
         "5+": 587450
       },
       "shareUnder1M": 0.979,
-      "medianSqft": 2172.5,
-      "updated": "2026-09-22"
+      "medianSqft": 2200,
+      "updated": "2026-09-23"
     },
     "grande-prairie": {
-      "count": 81,
-      "medianPrice": 419900,
-      "q1Price": 292000,
+      "count": 338,
+      "medianPrice": 389950,
+      "q1Price": 245000,
       "q3Price": 499900,
       "medianByBeds": {
-        "1": 212500,
-        "2": 259900,
-        "3": 425000,
-        "4": 454900,
-        "5+": 494450
+        "1": 213700,
+        "2": 215000,
+        "3": 412400,
+        "4": 437000,
+        "5+": 499900
       },
-      "shareUnder1M": 1,
-      "medianSqft": 1345,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.985,
+      "medianSqft": 1284,
+      "updated": "2026-09-23"
     },
     "guelph": {
       "count": 562,
@@ -744,20 +744,20 @@
       "updated": "2026-09-20"
     },
     "kensington": {
-      "count": 17,
-      "medianPrice": 299000,
-      "q1Price": 149000,
-      "q3Price": 411499.5,
+      "count": 30,
+      "medianPrice": 274450,
+      "q1Price": 125000,
+      "q3Price": 409900,
       "medianByBeds": {
         "1": null,
-        "2": 299000,
+        "2": 274450,
         "3": 367250,
-        "4": 2162949.5,
+        "4": 425449.5,
         "5+": 495900
       },
-      "shareUnder1M": 0.941,
-      "medianSqft": 1527.5,
-      "updated": "2026-09-22"
+      "shareUnder1M": 0.967,
+      "medianSqft": 1472,
+      "updated": "2026-09-23"
     },
     "kentville": {
       "count": 36,
@@ -824,36 +824,36 @@
       "updated": "2026-09-20"
     },
     "laval": {
-      "count": 9,
-      "medianPrice": 959000,
-      "q1Price": 679500,
-      "q3Price": 1479571.5,
+      "count": 16,
+      "medianPrice": 1229000,
+      "q1Price": 904500,
+      "q3Price": 2197500,
       "medianByBeds": {
         "1": null,
-        "2": 543000,
-        "3": 1029500,
-        "4": 1261143,
-        "5+": 789000
+        "2": 601000,
+        "3": 994500,
+        "4": 1750000,
+        "5+": 3250000
       },
-      "shareUnder1M": 0.556,
-      "medianSqft": null,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.375,
+      "medianSqft": 1443,
+      "updated": "2026-09-23"
     },
     "lethbridge": {
-      "count": 107,
-      "medianPrice": 439900,
-      "q1Price": 349500,
-      "q3Price": 600000,
+      "count": 464,
+      "medianPrice": 465000,
+      "q1Price": 359850,
+      "q3Price": 575000,
       "medianByBeds": {
-        "1": 259150,
+        "1": 302500,
         "2": 277000,
-        "3": 429900,
-        "4": 519950,
-        "5+": 679900
+        "3": 432500,
+        "4": 519450,
+        "5+": 599900
       },
-      "shareUnder1M": 0.981,
-      "medianSqft": 1216.5,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.985,
+      "medianSqft": 1224,
+      "updated": "2026-09-23"
     },
     "levis": {
       "count": 6,
@@ -888,20 +888,20 @@
       "updated": "2026-09-17"
     },
     "longueuil": {
-      "count": 4,
-      "medianPrice": 1134500,
-      "q1Price": 570000,
-      "q3Price": 2197000,
+      "count": 15,
+      "medianPrice": 1189000,
+      "q1Price": 559900,
+      "q3Price": 1998000,
       "medianByBeds": {
         "1": null,
-        "2": null,
+        "2": 535000,
         "3": 570000,
-        "4": null,
-        "5+": 2197000
+        "4": 1349000,
+        "5+": 1998000
       },
-      "shareUnder1M": 0.5,
+      "shareUnder1M": 0.4,
       "medianSqft": null,
-      "updated": "2026-09-20"
+      "updated": "2026-09-23"
     },
     "markham": {
       "count": 889,
@@ -920,20 +920,20 @@
       "updated": "2026-09-17"
     },
     "medicine-hat": {
-      "count": 54,
-      "medianPrice": 367500,
+      "count": 243,
+      "medianPrice": 385000,
       "q1Price": 262500,
-      "q3Price": 439900,
+      "q3Price": 548500,
       "medianByBeds": {
-        "1": 235500,
-        "2": 269450,
-        "3": 360000,
-        "4": 469900,
-        "5+": 514200
+        "1": 212300,
+        "2": 249900,
+        "3": 375000,
+        "4": 489400,
+        "5+": 589900
       },
-      "shareUnder1M": 1,
-      "medianSqft": 1116,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.984,
+      "medianSqft": 1161.5,
+      "updated": "2026-09-23"
     },
     "milton": {
       "count": 486,
@@ -1000,52 +1000,52 @@
       "updated": "2026-09-22"
     },
     "montague": {
-      "count": 17,
-      "medianPrice": 333500,
-      "q1Price": 162000,
-      "q3Price": 437000,
+      "count": 38,
+      "medianPrice": 304450,
+      "q1Price": 75000,
+      "q3Price": 399999,
       "medianByBeds": {
         "1": null,
-        "2": 317450,
-        "3": 358000,
-        "4": 414000,
-        "5+": 574000
+        "2": 329250,
+        "3": 330000,
+        "4": 442000,
+        "5+": 649000
       },
       "shareUnder1M": 1,
-      "medianSqft": 1600,
-      "updated": "2026-09-22"
+      "medianSqft": 1550,
+      "updated": "2026-09-23"
     },
     "montreal": {
-      "count": 18,
-      "medianPrice": 1770000,
-      "q1Price": 899000,
-      "q3Price": 2398000,
+      "count": 80,
+      "medianPrice": 1397000,
+      "q1Price": 685024,
+      "q3Price": 2399000,
       "medianByBeds": {
-        "1": 341000,
-        "2": 904500,
-        "3": 1745000,
+        "1": 495000,
+        "2": 1285000,
+        "3": 1598000,
         "4": 1795000,
-        "5+": 5099500
+        "5+": 3198000
       },
-      "shareUnder1M": 0.278,
-      "medianSqft": 747,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.35,
+      "medianSqft": 779.5,
+      "updated": "2026-09-23"
     },
     "moose-jaw": {
-      "count": 44,
-      "medianPrice": 227400,
-      "q1Price": 133950,
-      "q3Price": 347400,
+      "count": 187,
+      "medianPrice": 233000,
+      "q1Price": 139900,
+      "q3Price": 359900,
       "medianByBeds": {
-        "1": null,
-        "2": 172250,
-        "3": 299949.5,
-        "4": 337400,
-        "5+": 384900
+        "1": 104900,
+        "2": 154900,
+        "3": 299900,
+        "4": 369900,
+        "5+": 484900
       },
-      "shareUnder1M": 1,
-      "medianSqft": 1280.5,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.995,
+      "medianSqft": 1152,
+      "updated": "2026-09-23"
     },
     "mount-pearl": {
       "count": 29,
@@ -1080,20 +1080,20 @@
       "updated": "2026-09-20"
     },
     "new-glasgow": {
-      "count": 57,
+      "count": 58,
       "medianPrice": 319000,
-      "q1Price": 239450,
-      "q3Price": 422400,
+      "q1Price": 239000,
+      "q3Price": 414900,
       "medianByBeds": {
         "1": 239000,
         "2": 277300,
-        "3": 299900,
+        "3": 289900,
         "4": 379000,
         "5+": 485000
       },
-      "shareUnder1M": 0.982,
-      "medianSqft": 1870,
-      "updated": "2026-09-22"
+      "shareUnder1M": 0.983,
+      "medianSqft": 1853.5,
+      "updated": "2026-09-23"
     },
     "newmarket": {
       "count": 318,
@@ -1128,20 +1128,20 @@
       "updated": "2026-09-17"
     },
     "north-battleford": {
-      "count": 18,
-      "medianPrice": 204900,
-      "q1Price": 127500,
-      "q3Price": 349900,
+      "count": 57,
+      "medianPrice": 194900,
+      "q1Price": 119900,
+      "q3Price": 282500,
       "medianByBeds": {
         "1": null,
-        "2": 141200,
-        "3": 157000,
+        "2": 131200,
+        "3": 161950,
         "4": 229900,
-        "5+": 406950
+        "5+": 264900
       },
       "shareUnder1M": 1,
-      "medianSqft": 995,
-      "updated": "2026-09-20"
+      "medianSqft": 1040.5,
+      "updated": "2026-09-23"
     },
     "oakville": {
       "count": 852,
@@ -1160,20 +1160,20 @@
       "updated": "2026-09-17"
     },
     "okotoks": {
-      "count": 27,
-      "medianPrice": 649900,
-      "q1Price": 550000,
-      "q3Price": 815484,
+      "count": 114,
+      "medianPrice": 577500,
+      "q1Price": 449000,
+      "q3Price": 759900,
       "medianByBeds": {
-        "1": null,
-        "2": 494500,
-        "3": 574900,
+        "1": 271523,
+        "2": 430000,
+        "3": 537450,
         "4": 715000,
-        "5+": 955000
+        "5+": 849900
       },
-      "shareUnder1M": 0.889,
-      "medianSqft": 1563,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.921,
+      "medianSqft": 1493,
+      "updated": "2026-09-23"
     },
     "orillia": {
       "count": 235,
@@ -1192,36 +1192,36 @@
       "updated": "2026-09-17"
     },
     "ottawa": {
-      "count": 1043,
-      "medianPrice": 729900,
+      "count": 1039,
+      "medianPrice": 729800,
       "q1Price": 565000,
-      "q3Price": 989000,
+      "q3Price": 984900,
       "medianByBeds": {
         "1": 319000,
         "2": 429450,
         "3": 649000,
-        "4": 874900,
-        "5+": 1117500
+        "4": 872450,
+        "5+": 1110000
       },
-      "shareUnder1M": 0.778,
+      "shareUnder1M": 0.779,
       "medianSqft": null,
       "updated": "2026-09-17"
     },
     "paradise": {
-      "count": 57,
+      "count": 93,
       "medianPrice": 499000,
-      "q1Price": 429900,
+      "q1Price": 427450,
       "q3Price": 649900,
       "medianByBeds": {
-        "1": null,
+        "1": 179900,
         "2": 439900,
-        "3": 524900,
-        "4": 644900,
-        "5+": 626193.5
+        "3": 559450,
+        "4": 469900,
+        "5+": 624900
       },
-      "shareUnder1M": 0.982,
-      "medianSqft": 2059,
-      "updated": "2026-09-22"
+      "shareUnder1M": 0.957,
+      "medianSqft": 2244,
+      "updated": "2026-09-23"
     },
     "peterborough": {
       "count": 369,
@@ -1256,8 +1256,8 @@
       "updated": "2026-09-17"
     },
     "portugal-cove-st-philips": {
-      "count": 54,
-      "medianPrice": 287000,
+      "count": 55,
+      "medianPrice": 299000,
       "q1Price": 114900,
       "q3Price": 665000,
       "medianByBeds": {
@@ -1267,73 +1267,73 @@
         "4": 699900,
         "5+": 829900
       },
-      "shareUnder1M": 0.926,
+      "shareUnder1M": 0.927,
       "medianSqft": 2891,
-      "updated": "2026-09-22"
+      "updated": "2026-09-23"
     },
     "prince-albert": {
-      "count": 27,
+      "count": 110,
       "medianPrice": 199900,
-      "q1Price": 144900,
-      "q3Price": 249900,
+      "q1Price": 139900,
+      "q3Price": 329500,
       "medianByBeds": {
-        "1": 119900,
-        "2": 206950,
-        "3": 199900,
-        "4": 175000,
-        "5+": 399900
+        "1": 129900,
+        "2": 154900,
+        "3": 209900,
+        "4": 314900,
+        "5+": 374900
       },
-      "shareUnder1M": 1,
-      "medianSqft": 1115,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.982,
+      "medianSqft": 1154,
+      "updated": "2026-09-23"
     },
     "quispamsis": {
-      "count": 54,
+      "count": 56,
       "medianPrice": 434900,
-      "q1Price": 170000,
-      "q3Price": 630000,
+      "q1Price": 177500,
+      "q3Price": 639950,
       "medianByBeds": {
         "1": null,
         "2": null,
-        "3": 429450,
+        "3": 419000,
         "4": 512449.5,
-        "5+": 799900
+        "5+": 749900
       },
-      "shareUnder1M": 0.963,
+      "shareUnder1M": 0.964,
       "medianSqft": 2349,
-      "updated": "2026-09-22"
+      "updated": "2026-09-23"
     },
     "red-deer": {
-      "count": 107,
-      "medianPrice": 414900,
-      "q1Price": 299900,
-      "q3Price": 589900,
+      "count": 477,
+      "medianPrice": 409900,
+      "q1Price": 298700,
+      "q3Price": 562450,
       "medianByBeds": {
-        "1": 214900,
-        "2": 242450,
-        "3": 374900,
-        "4": 509450,
-        "5+": 699000
+        "1": 167450,
+        "2": 259900,
+        "3": 374000,
+        "4": 510900,
+        "5+": 550000
       },
-      "shareUnder1M": 0.972,
-      "medianSqft": 1256,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.975,
+      "medianSqft": 1199,
+      "updated": "2026-09-23"
     },
     "regina": {
-      "count": 171,
-      "medianPrice": 339900,
-      "q1Price": 227900,
-      "q3Price": 524900,
+      "count": 782,
+      "medianPrice": 322400,
+      "q1Price": 189000,
+      "q3Price": 474900,
       "medianByBeds": {
-        "1": 150450,
-        "2": 226400,
-        "3": 317800,
-        "4": 447400,
-        "5+": 579900
+        "1": 129900,
+        "2": 189900,
+        "3": 329900,
+        "4": 439900,
+        "5+": 539900
       },
-      "shareUnder1M": 0.982,
-      "medianSqft": 1163,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.976,
+      "medianSqft": 1142,
+      "updated": "2026-09-23"
     },
     "repentigny": {
       "count": 1,
@@ -1480,20 +1480,20 @@
       "updated": "2026-09-17"
     },
     "saskatoon": {
-      "count": 180,
-      "medianPrice": 484900,
-      "q1Price": 302400,
-      "q3Price": 612450,
+      "count": 844,
+      "medianPrice": 439900,
+      "q1Price": 299900,
+      "q3Price": 599900,
       "medianByBeds": {
-        "1": 240950,
-        "2": 269900,
-        "3": 457500,
-        "4": 622400,
-        "5+": 599900
+        "1": 259900,
+        "2": 275000,
+        "3": 433333,
+        "4": 559000,
+        "5+": 625000
       },
-      "shareUnder1M": 0.967,
-      "medianSqft": 1242.5,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.961,
+      "medianSqft": 1224,
+      "updated": "2026-09-23"
     },
     "sault-ste-marie": {
       "count": 15,
@@ -1512,20 +1512,20 @@
       "updated": "2026-09-17"
     },
     "selkirk": {
-      "count": 9,
+      "count": 12,
       "medianPrice": 149000,
       "q1Price": 149000,
       "q3Price": 184000,
       "medianByBeds": {
         "1": null,
         "2": null,
-        "3": null,
+        "3": 599000,
         "4": null,
         "5+": null
       },
       "shareUnder1M": 1,
       "medianSqft": null,
-      "updated": "2026-09-20"
+      "updated": "2026-09-23"
     },
     "sherbrooke": {
       "count": 4,
@@ -1560,36 +1560,36 @@
       "updated": "2026-09-22"
     },
     "spruce-grove": {
-      "count": 63,
-      "medianPrice": 468800,
-      "q1Price": 414900,
-      "q3Price": 584900,
+      "count": 267,
+      "medianPrice": 461259,
+      "q1Price": 397000,
+      "q3Price": 600000,
       "medianByBeds": {
-        "1": null,
-        "2": 290400,
-        "3": 454900,
-        "4": 517450,
-        "5+": 817000
+        "1": 259750,
+        "2": 219500,
+        "3": 439450,
+        "4": 560999.5,
+        "5+": 725000
       },
       "shareUnder1M": 1,
-      "medianSqft": 1614,
-      "updated": "2026-09-20"
+      "medianSqft": 1574,
+      "updated": "2026-09-23"
     },
     "st-albert": {
-      "count": 54,
-      "medianPrice": 523897.5,
-      "q1Price": 378900,
-      "q3Price": 649900,
+      "count": 225,
+      "medianPrice": 524900,
+      "q1Price": 424900,
+      "q3Price": 659000,
       "medianByBeds": {
-        "1": 214900,
-        "2": 349000,
-        "3": 512450,
-        "4": 569900,
-        "5+": 734900
+        "1": 287900,
+        "2": 349900,
+        "3": 485000,
+        "4": 599450,
+        "5+": 649900
       },
-      "shareUnder1M": 0.981,
-      "medianSqft": 1563,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.951,
+      "medianSqft": 1518.5,
+      "updated": "2026-09-23"
     },
     "st-catharines": {
       "count": 645,
@@ -1608,20 +1608,20 @@
       "updated": "2026-09-17"
     },
     "st-johns": {
-      "count": 48,
-      "medianPrice": 374450,
-      "q1Price": 272450,
-      "q3Price": 624950,
+      "count": 204,
+      "medianPrice": 409450,
+      "q1Price": 291825,
+      "q3Price": 610000,
       "medianByBeds": {
-        "1": null,
-        "2": 284450,
-        "3": 335000,
-        "4": 424450,
-        "5+": 414450
+        "1": 288750,
+        "2": 259950,
+        "3": 387450,
+        "4": 505000,
+        "5+": 499900
       },
-      "shareUnder1M": 0.958,
-      "medianSqft": 2097,
-      "updated": "2026-09-22"
+      "shareUnder1M": 0.926,
+      "medianSqft": 2200,
+      "updated": "2026-09-23"
     },
     "stratford": {
       "count": 106,
@@ -1656,68 +1656,68 @@
       "updated": "2026-09-17"
     },
     "summerside": {
-      "count": 122,
+      "count": 125,
       "medianPrice": 339000,
-      "q1Price": 238000,
-      "q3Price": 414900,
+      "q1Price": 238850,
+      "q3Price": 417400,
       "medianByBeds": {
         "1": 309900,
         "2": 289000,
         "3": 327400,
-        "4": 379000,
+        "4": 387000,
         "5+": 474700
       },
-      "shareUnder1M": 0.967,
-      "medianSqft": 1536,
-      "updated": "2026-09-22"
+      "shareUnder1M": 0.968,
+      "medianSqft": 1523,
+      "updated": "2026-09-23"
     },
     "surrey": {
-      "count": 179,
-      "medianPrice": 1388800,
-      "q1Price": 899000,
-      "q3Price": 2080000,
+      "count": 907,
+      "medianPrice": 1259000,
+      "q1Price": 749000,
+      "q3Price": 1728000,
       "medianByBeds": {
-        "1": 399000,
-        "2": 565000,
-        "3": 1099900,
-        "4": 1199000,
-        "5+": 1849000
+        "1": 389950,
+        "2": 514999,
+        "3": 824900,
+        "4": 1249000,
+        "5+": 1649944
       },
-      "shareUnder1M": 0.285,
-      "medianSqft": 2671,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.367,
+      "medianSqft": 2273,
+      "updated": "2026-09-23"
     },
     "swift-current": {
-      "count": 18,
-      "medianPrice": 217000,
-      "q1Price": 99500,
-      "q3Price": 329900,
+      "count": 77,
+      "medianPrice": 268000,
+      "q1Price": 133700,
+      "q3Price": 332450,
       "medianByBeds": {
-        "1": 125000,
-        "2": 83950,
-        "3": 337450,
-        "4": 289900,
-        "5+": 349450
+        "1": 122000,
+        "2": 131150,
+        "3": 229000,
+        "4": 299000,
+        "5+": 289450
       },
-      "shareUnder1M": 1,
-      "medianSqft": 1014.5,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.987,
+      "medianSqft": 1085,
+      "updated": "2026-09-23"
     },
     "sydney": {
-      "count": 119,
+      "count": 121,
       "medianPrice": 269000,
-      "q1Price": 214900,
-      "q3Price": 385000,
+      "q1Price": 212450,
+      "q3Price": 384500,
       "medianByBeds": {
         "1": 256950,
         "2": 250000,
-        "3": 239000,
+        "3": 236450,
         "4": 339900,
         "5+": 275000
       },
       "shareUnder1M": 1,
       "medianSqft": 1513,
-      "updated": "2026-09-22"
+      "updated": "2026-09-23"
     },
     "terrebonne": {
       "count": 3,
@@ -1800,20 +1800,20 @@
       "updated": "2026-09-22"
     },
     "vancouver": {
-      "count": 178,
-      "medianPrice": 1685000,
-      "q1Price": 975000,
-      "q3Price": 2750000,
+      "count": 891,
+      "medianPrice": 1499900,
+      "q1Price": 899900,
+      "q3Price": 2688000,
       "medianByBeds": {
-        "1": 538000,
-        "2": 969000,
-        "3": 1665000,
-        "4": 2128500,
-        "5+": 3448000
+        "1": 599000,
+        "2": 998900,
+        "3": 1650000,
+        "4": 1913950,
+        "5+": 3639500
       },
-      "shareUnder1M": 0.27,
-      "medianSqft": 1638,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.296,
+      "medianSqft": 1544,
+      "updated": "2026-09-23"
     },
     "vaughan": {
       "count": 890,
@@ -1848,20 +1848,20 @@
       "updated": "2026-09-20"
     },
     "warman": {
-      "count": 18,
-      "medianPrice": 553950,
-      "q1Price": 469000,
-      "q3Price": 614900,
+      "count": 63,
+      "medianPrice": 554900,
+      "q1Price": 504900,
+      "q3Price": 669900,
       "medianByBeds": {
         "1": null,
-        "2": null,
-        "3": 545000,
-        "4": 526950,
-        "5+": 679900
+        "2": 309900,
+        "3": 541450,
+        "4": 584900,
+        "5+": 678500
       },
-      "shareUnder1M": 1,
-      "medianSqft": 1389,
-      "updated": "2026-09-20"
+      "shareUnder1M": 0.968,
+      "medianSqft": 1440,
+      "updated": "2026-09-23"
     },
     "waterloo": {
       "count": 494,
@@ -1880,20 +1880,20 @@
       "updated": "2026-09-17"
     },
     "weyburn": {
-      "count": 16,
-      "medianPrice": 178000,
-      "q1Price": 89799,
-      "q3Price": 217250,
+      "count": 48,
+      "medianPrice": 207200,
+      "q1Price": 172000,
+      "q3Price": 325000,
       "medianByBeds": {
         "1": 79900,
-        "2": 134250,
-        "3": 187000,
-        "4": null,
+        "2": 179000,
+        "3": 219900,
+        "4": 350000,
         "5+": 310000
       },
       "shareUnder1M": 1,
-      "medianSqft": 1192,
-      "updated": "2026-09-20"
+      "medianSqft": 1200,
+      "updated": "2026-09-23"
     },
     "whitby": {
       "count": 410,
@@ -1960,20 +1960,20 @@
       "updated": "2026-09-22"
     },
     "yorkton": {
-      "count": 18,
-      "medianPrice": 227400,
-      "q1Price": 179000,
-      "q3Price": 299000,
+      "count": 63,
+      "medianPrice": 235800,
+      "q1Price": 169000,
+      "q3Price": 369900,
       "medianByBeds": {
-        "1": null,
-        "2": 169000,
-        "3": 179000,
-        "4": 293650,
-        "5+": 240350
+        "1": 80000,
+        "2": 162500,
+        "3": 207000,
+        "4": 312000,
+        "5+": 397450
       },
       "shareUnder1M": 1,
-      "medianSqft": 1123,
-      "updated": "2026-09-20"
+      "medianSqft": 1122,
+      "updated": "2026-09-23"
     }
   }
 }

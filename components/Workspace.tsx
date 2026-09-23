@@ -124,7 +124,7 @@ export default function Workspace({ summary, offline }: Props) {
 
   return <div className="atlas-app">
     <header className="atlas-header">
-      <a className="wordmark" href="/" aria-label="Canada Housing Agent home"><span className="atlas-symbol" aria-hidden="true"><i /><i /><i /></span>canada<span className="wordmark-label">HOUSING ATLAS</span></a>
+      <a className="wordmark" href="/" aria-label="Canadian Housing Agent home"><span className="atlas-symbol" aria-hidden="true"><i /><i /><i /></span>canada<span className="wordmark-label">HOUSING ATLAS</span></a>
       <nav className="workspace-nav" aria-label="Workspace view">
         <button aria-pressed={view === "explore"} onClick={() => { setView("explore"); setMobileView("map"); }}><Icon name="map" />Explore</button>
         <button aria-pressed={view === "compare"} onClick={() => { setView("compare"); setMobileView("map"); }}><Icon name="compare" />Compare<span className="nav-count">2</span></button>
