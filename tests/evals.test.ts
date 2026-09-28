@@ -417,7 +417,7 @@ describe("eval case parsing", () => {
 
   it("parses every shipped case, including the multi-turn and capability additions", () => {
     const cases = loadCases();
-    expect(cases).toHaveLength(44);
+    expect(cases).toHaveLength(47);
     expect(cases.filter((c) => c.turns).map((c) => c.id)).toEqual(["MT01", "MT02", "MT03", "MT04"]);
     expect(cases.find((c) => c.id === "C01")?.expect).toEqual({
       tool: "city_snapshot",
@@ -482,6 +482,28 @@ describe("eval case parsing", () => {
     expect(cases.find((c) => c.id === "MT03")?.checks).toEqual([
       { type: "numeric", source: { kind: "snapshot_median_by_beds", city: "windsor", beds: "4" } },
     ]);
+  });
+
+  it("parses and mock-scores the deal cases with runtime numeric sources", async () => {
+    const cases = loadCases();
+    expect(cases.find((c) => c.id === "D01")?.expect).toEqual({
+      tool: "find_deals",
+      args: { city: "brampton" },
+    });
+    expect(cases.find((c) => c.id === "ND01")?.checks).toEqual([
+      { type: "numeric", source: { kind: "deal_count", city: "brampton", minDiscount: 15 }, unit: "count" },
+    ]);
+    expect(cases.find((c) => c.id === "ND02")?.checks).toEqual([
+      { type: "numeric", source: { kind: "deal_top_discount", city: "calgary" }, unit: "percent" },
+    ]);
+
+    for (const id of ["D01", "ND01", "ND02"]) {
+      const evalCase = cases.find((c) => c.id === id);
+      expect(evalCase?.rationale).toBeTruthy();
+      const outcome = await runAgentCase(evalCase!, createMockProvider());
+      const result = evaluateCaseOutcome(evalCase!, outcome);
+      expect(result.passed, `${id}: ${result.detail}`).toBe(true);
+    }
   });
 
   it("validates anyOf expectations", () => {

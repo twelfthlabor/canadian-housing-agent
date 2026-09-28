@@ -53,7 +53,8 @@ preflight_fail() {
 [ -d "$SCRAPER_REPO" ] || preflight_fail "scraper repo not found: $SCRAPER_REPO"
 [ -x "$SCRAPER_REPO/.venv313/bin/property-ontario" ] || preflight_fail "property-ontario missing or not executable"
 [ -f "$SCRAPER_REPO/scripts/pull_all_provinces.sh" ] || preflight_fail "pull_all_provinces.sh not found"
-for regions_file in "$SCRAPER_REPO"/regions.ontario.json "$SCRAPER_REPO"/regions.[a-z][a-z].json; do
+for prov in on ab bc mb nb nl ns nt nu pe qc sk yt; do
+  regions_file="$SCRAPER_REPO/regions/$prov.json"
   [ -f "$regions_file" ] || preflight_fail "regions file not found: $regions_file"
 done
 [ -f "$APP_REPO/data/listings.json" ] || preflight_fail "data/listings.json not found"
@@ -139,13 +140,12 @@ except Exception:
     pending = False
 print("true" if pending else "false")' "$SCRAPER_REPO/data/regions/queue-state.json"
 )"
-REGION_COUNT="$(ls "$SCRAPER_REPO"/regions.ontario.json "$SCRAPER_REPO"/regions.[a-z][a-z].json 2>/dev/null | wc -l | tr -d ' ')"
+REGION_COUNT="$(ls "$SCRAPER_REPO"/regions/[a-z][a-z].json 2>/dev/null | wc -l | tr -d ' ')"
 SLUGS="$(
   python3 -c 'import glob, json, os, sys
 out = []
-for path in sorted(glob.glob(os.path.join(sys.argv[1], "regions*.json"))):
-    base = os.path.basename(path)
-    prov = "on" if base == "regions.ontario.json" else base[len("regions."):-len(".json")]
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "regions", "[a-z][a-z].json"))):
+    prov = os.path.basename(path)[:-len(".json")]
     data = json.load(open(path))
     regions = data["regions"] if isinstance(data, dict) else data
     out.extend(r["city"] + "-" + prov for r in regions)

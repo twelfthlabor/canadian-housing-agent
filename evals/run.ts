@@ -37,7 +37,7 @@ import { runAgent } from "../lib/agent";
 import type { AgentInputMessage } from "../lib/agent";
 import { createMockProvider, getProvider } from "../lib/providers";
 import type { Provider } from "../lib/providers";
-import { TOOL_IMPLS, citySnapshot, searchListings } from "../lib/tools";
+import { TOOL_IMPLS, citySnapshot, findDeals, searchListings } from "../lib/tools";
 import type { CitySnapshot } from "../lib/types";
 
 /* -------------------------------------------------------------------------
@@ -55,7 +55,9 @@ type NumericSource =
   | { kind: "snapshot_median_by_beds"; city: string; beds: string }
   | { kind: "search_total"; city: string; beds?: number }
   | { kind: "cheapest_price"; city: string; beds?: number }
-  | { kind: "priciest_price"; city: string };
+  | { kind: "priciest_price"; city: string }
+  | { kind: "deal_count"; city: string; minDiscount: number }
+  | { kind: "deal_top_discount"; city: string };
 
 type Check =
   | { type: "numeric"; source: NumericSource; unit?: Unit }
@@ -326,6 +328,24 @@ function resolveExpected(source: NumericSource): Resolved {
       const first = result.listings[0];
       if (!first) throw new Error(`${source.kind}: no listings matched in ${source.city}`);
       return { value: first.price, unit: "cad", label: `${source.city} priciest price` };
+    }
+    case "deal_count": {
+      const result = findDeals({ city: source.city, minDiscount: source.minDiscount, limit: 1 });
+      if (!result) throw new Error(`${source.kind}: unknown city "${source.city}"`);
+      return {
+        value: result.totalMatches,
+        unit: "count",
+        label: `${source.city} findDeals totalMatches (minDiscount ${result.minDiscount})`,
+      };
+    }
+    case "deal_top_discount": {
+      const result = findDeals({ city: source.city });
+      if (!result) throw new Error(`${source.kind}: unknown city "${source.city}"`);
+      const top = result.listings[0];
+      if (!top || typeof top.discountPct !== "number") {
+        throw new Error(`${source.kind}: no deals in ${source.city}`);
+      }
+      return { value: top.discountPct, unit: "percent", label: `${source.city} top discountPct` };
     }
   }
 }

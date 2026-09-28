@@ -5,7 +5,7 @@
  */
 
 import { knownCities } from "./tools";
-import type { CitySnapshot, Listing } from "./types";
+import type { CitySnapshot, FindDealsResult, Listing } from "./types";
 
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite";
@@ -140,6 +140,23 @@ export function mockToolCallFor(
     };
   }
 
+  // "below" only signals a deal when it refers to the estimate, so plain
+  // budget questions ("below $700k") keep their pre-existing tool choice.
+  const dealIntent =
+    /\b(undervalued|undervalue|bargain|deals?|discounts?)\b/.test(q) ||
+    /\bbelow\b[^.!?]{0,40}\b(?:estimate|comparable)/.test(q);
+  if (cities.length >= 1 && dealIntent) {
+    const explicit = q.match(/\b(\d{1,3}(?:\.\d+)?)\s*%/);
+    return {
+      id: "mock_deals",
+      name: "find_deals",
+      args: {
+        city: cities[0],
+        ...(explicit ? { minDiscount: Number(explicit[1]) } : {}),
+      },
+    };
+  }
+
   if (cities.length >= 1) {
     return { id: "mock_snapshot", name: "city_snapshot", args: { city: cities[0] } };
   }
@@ -205,6 +222,26 @@ export function mockAnswerFromToolResult(message: ChatMessage): string {
     )} listings in the sample, with a median asking price of ${formatMoney(
       snapshot.medianPrice,
     )}.${shareText}`;
+  }
+
+  if (message.name === "find_deals") {
+    const result = data as FindDealsResult | null;
+    if (!result || typeof result.city !== "string") {
+      return "I do not have deal data for that city in the sample.";
+    }
+    if (result.totalMatches === 0 || result.listings.length === 0) {
+      return `No ${displayCity(result.city)} listings in the sample are more than ${result.minDiscount}% below the comparable-listings estimate (${Number(
+        result.considered ?? 0,
+      ).toLocaleString("en-CA")} listings considered).`;
+    }
+    const top = result.listings[0];
+    const where = top.address ? `, ${top.address}` : "";
+    const source = top.url ? ` (${top.url})` : "";
+    return `The sample has ${result.totalMatches.toLocaleString("en-CA")} listings in ${displayCity(
+      result.city,
+    )} at least ${result.minDiscount}% below the comparable-listings estimate. The largest discount is ${
+      top.discountPct
+    }% below estimate: a ${top.beds ?? "?"}-bed at ${formatMoney(top.price)}${where}${source}.`;
   }
 
   if (message.name === "compare_cities") {

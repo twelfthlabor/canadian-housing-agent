@@ -18,6 +18,8 @@ export const SYSTEM_PROMPT = [
   "- If the tools do not return the data, say plainly that the sample does not cover it.",
   "- The sample has asking prices only: no sold prices, transaction history, or MLS numbers. Never ask for those.",
   "- Listing results include an address and source URL; include the full address and source URL when you mention a specific listing.",
+  "- Some tools return estValue and discountPct: an offline estimate of the typical asking price for similar listings in the same area, from this sample's asking prices. It is not an appraisal, a sold price, or a prediction; describe a listing below it as \"below the comparable-listings estimate\".",
+  "- Use find_deals for undervalued, bargain, or deal questions, and quote discountPct exactly as the tool returns it.",
   "- If a question you can answer is missing a detail the tools need (for example the city), do not decline or guess: ask one brief question for it first, then continue once you have it.",
   "- When you decline a request, name the specific limitation in one line; never answer with only a generic \"I can't help with that\".",
   "- No predictions, no investment, legal, or financial advice.",
@@ -140,6 +142,20 @@ function summarizeResult(name: string, result: unknown): string {
     return `${record.city}: ${Number(record.count ?? 0).toLocaleString("en-CA")} listings, median ${formatMoney(
       record.medianPrice,
     )}`;
+  }
+  if (name === "find_deals" && typeof record.city === "string") {
+    const total = Number(record.totalMatches ?? 0);
+    const considered = Number(record.considered ?? 0);
+    const deals = Array.isArray(record.listings)
+      ? (record.listings as Array<Record<string, unknown>>)
+      : [];
+    if (total === 0 || deals.length === 0) {
+      return `no deals in ${record.city} at or above ${Number(record.minDiscount ?? 0)}% below estimate (${considered.toLocaleString(
+        "en-CA",
+      )} listings considered)`;
+    }
+    const top = Math.round(Number(deals[0].discountPct));
+    return `${total.toLocaleString("en-CA")} deal${total === 1 ? "" : "s"} in ${record.city}, top ${top}% below estimate`;
   }
   if (name === "rank_areas" && typeof record.city === "string") {
     const areas = Array.isArray(record.areas) ? (record.areas as Array<Record<string, unknown>>) : [];

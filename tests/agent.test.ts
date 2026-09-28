@@ -14,7 +14,7 @@ import { createMockProvider, ProviderError } from "../lib/providers";
 import type { Provider } from "../lib/providers";
 import { createGuardState } from "../lib/guards";
 import { TOOL_IMPLS, knownCities } from "../lib/tools";
-import type { CitySnapshot, RankAreasResult } from "../lib/types";
+import type { CitySnapshot, FindDealsResult, RankAreasResult } from "../lib/types";
 import { POST } from "../app/api/chat/route";
 
 async function collect(
@@ -117,6 +117,27 @@ describe("mock-provider agent turns (no network)", () => {
     expect(events[events.length - 1]).toEqual({ type: "done" });
   });
 
+  it("answers a deal question with find_deals and the top discount", async () => {
+    const events = await collect("Find undervalued listings in Brampton");
+
+    const tool = toolOf(events);
+    expect(tool?.name).toBe("find_deals");
+    expect(tool?.args.city).toBe("brampton");
+    expect(events.some((event) => event.type === "tool_result")).toBe(true);
+
+    const data = toolResultsOf(events)[0]?.data as FindDealsResult;
+    expect(data.totalMatches).toBeGreaterThan(0);
+    expect(toolResultsOf(events)[0]?.summary).toBe(
+      `${data.totalMatches.toLocaleString("en-CA")} deals in brampton, top ${Math.round(
+        Number(data.listings[0].discountPct),
+      )}% below estimate`,
+    );
+    const text = textOf(events);
+    expect(text).toContain("below the comparable-listings estimate");
+    expect(text).toContain(`${data.listings[0].discountPct}% below estimate`);
+    expect(events[events.length - 1]).toEqual({ type: "done" });
+  });
+
   it("answers a question with no known city without calling a tool", async () => {
     const events = await collect("Hello there, what can you do?");
 
@@ -212,6 +233,16 @@ describe("system prompt contract (no network)", () => {
     expect(prompt).toMatch(/missing[^.]*detail/);
     expect(prompt).toMatch(/do not decline/);
     expect(prompt).toMatch(/ask one brief question/);
+  });
+
+  it("documents the offline comparable-listings estimate and the deal tool", () => {
+    expect(SYSTEM_PROMPT).toContain("offline estimate of the typical asking price for similar listings");
+    expect(SYSTEM_PROMPT).toContain("not an appraisal, a sold price, or a prediction");
+    expect(SYSTEM_PROMPT).toContain('"below the comparable-listings estimate"');
+    expect(SYSTEM_PROMPT).toContain("Use find_deals for undervalued, bargain, or deal questions");
+    expect(SYSTEM_PROMPT).toContain("quote discountPct exactly as the tool returns it");
+    // The existing no-predictions/no-advice line stays.
+    expect(SYSTEM_PROMPT).toContain("No predictions, no investment, legal, or financial advice.");
   });
 });
 
@@ -405,6 +436,37 @@ describe("tool_result summaries for filtered and ranked tools (no network)", () 
       events = await collect("anything", oneShotProvider("rank_areas", { city: firstCity }));
       expect(toolResultsOf(events)[0]?.summary).toBe(
         `no area with 5 or more matching listings in ${firstCity} (9 listings considered)`,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("summarizes find_deals results, quoting the top discount", async () => {
+    const spy = vi.spyOn(TOOL_IMPLS, "find_deals");
+    try {
+      spy.mockReturnValue({
+        city: "brampton",
+        minDiscount: 20,
+        considered: 928,
+        totalMatches: 1,
+        returned: 1,
+        listings: [{ discountPct: 22.4 }],
+      });
+      let events = await collect("anything", oneShotProvider("find_deals", { city: "brampton" }));
+      expect(toolResultsOf(events)[0]?.summary).toBe("1 deal in brampton, top 22% below estimate");
+
+      spy.mockReturnValue({
+        city: "brampton",
+        minDiscount: 20,
+        considered: 928,
+        totalMatches: 0,
+        returned: 0,
+        listings: [],
+      });
+      events = await collect("anything", oneShotProvider("find_deals", { city: "brampton" }));
+      expect(toolResultsOf(events)[0]?.summary).toBe(
+        "no deals in brampton at or above 20% below estimate (928 listings considered)",
       );
     } finally {
       spy.mockRestore();

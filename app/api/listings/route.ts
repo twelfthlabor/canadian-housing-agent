@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { listings } from "@/lib/dataset";
+import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, defaultMinDiscountPct } from "@/lib/tools";
 import type { Listing } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -16,6 +17,15 @@ export function parseLimit(value: string | null): number {
   return requested >= 1 ? Math.min(MAX_LIMIT, Math.floor(requested)) : DEFAULT_LIMIT;
 }
 
+/** Deal threshold from the valuation metadata, clamped to [0, MAX_DISCOUNT_PCT]. */
+export function parseMinDiscount(value: string | null): number {
+  const fallback = Math.min(MAX_DISCOUNT_PCT, Math.max(0, defaultMinDiscountPct()));
+  if (value === null || value.trim() === "") return fallback;
+  const requested = Number(value);
+  if (!Number.isFinite(requested)) return fallback;
+  return Math.min(MAX_DISCOUNT_PCT, Math.max(0, requested));
+}
+
 /** RFC 4180 field, with a leading quote so spreadsheet formulas stay text. */
 export function csvCell(value: string | number | null): string {
   let text = value === null ? "" : String(value);
@@ -23,10 +33,23 @@ export function csvCell(value: string | number | null): string {
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-const CSV_HEADER = "city,province,fsa,price,beds,baths,sqft,seen,address,url";
+const CSV_HEADER = "city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct";
 
 export const csvRow = (row: Listing): string =>
-  [row.city, row.province, row.fsa, row.price, row.beds, row.baths, row.sqft, row.seen, row.address ?? "", row.url ?? ""]
+  [
+    row.city,
+    row.province,
+    row.fsa,
+    row.price,
+    row.beds,
+    row.baths,
+    row.sqft,
+    row.seen,
+    row.address ?? "",
+    row.url ?? "",
+    row.estValue ?? null,
+    row.discountPct ?? null,
+  ]
     .map(csvCell)
     .join(",");
 
@@ -57,7 +80,28 @@ export async function GET(request: NextRequest) {
 
   const city = params.get("city") ?? "";
   const limit = parseLimit(params.get("limit"));
-  const matches = listings.filter(row => row.city === city).sort((a, b) => a.price - b.price);
+  const sort = params.get("sort") === "discount" ? "discount" : "price";
+  const minDiscount = parseMinDiscount(params.get("minDiscount"));
+  const cityRows = listings.filter(row => row.city === city);
+
+  const matches = sort === "discount"
+    ? cityRows
+        .filter(
+          row =>
+            row.estValue !== null &&
+            row.discountPct !== null &&
+            row.price >= DEAL_MIN_PRICE &&
+            row.discountPct >= minDiscount &&
+            row.discountPct <= MAX_DISCOUNT_PCT,
+        )
+        .sort(
+          (a, b) =>
+            Number(b.discountPct) - Number(a.discountPct) ||
+            a.price - b.price ||
+            (a.address ?? "").localeCompare(b.address ?? ""),
+        )
+    : cityRows.sort((a, b) => a.price - b.price);
+
   const page = matches.slice(0, limit);
 
   return NextResponse.json(

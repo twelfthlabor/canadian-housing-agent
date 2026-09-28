@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   citySnapshot,
   compareCities,
+  DEAL_MIN_PRICE,
+  defaultMinDiscountPct,
+  findDeals,
   knownCities,
+  MAX_DISCOUNT_PCT,
   rankAreas,
   searchListings,
   TOOL_IMPLS,
@@ -17,6 +21,24 @@ const topCity = cities.reduce(
   cities[0],
 );
 const topCount = summary.cities[topCity].count;
+
+/** A row has a usable estimate when the pipeline wrote both fields. */
+function hasUsableEstimate(row: Listing): boolean {
+  return typeof row.estValue === "number" && typeof row.discountPct === "number";
+}
+
+const dealDefaultPct = defaultMinDiscountPct();
+/** Deterministic, data-derived city with the most rows that clear the default deal rules. */
+const dealCity = (() => {
+  const counts = new Map<string, number>();
+  for (const row of listings) {
+    if (!hasUsableEstimate(row) || row.price < DEAL_MIN_PRICE) continue;
+    const discount = row.discountPct as number;
+    if (discount < dealDefaultPct || discount > MAX_DISCOUNT_PCT) continue;
+    counts.set(row.city, (counts.get(row.city) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+})();
 
 function medianOf(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -535,6 +557,167 @@ describe("rankAreas", () => {
   });
 });
 
+describe("findDeals", () => {
+  const hasEstimate = hasUsableEstimate;
+  const discountOf = (row: Listing): number => row.discountPct as number;
+  const dealDefault = dealDefaultPct;
+
+  const capCity = [...new Set(listings.map((row) => row.city))].find(
+    (city) =>
+      listings.some((row) => row.city === city && hasEstimate(row) && discountOf(row) > MAX_DISCOUNT_PCT) &&
+      listings.some((row) => row.city === city && hasEstimate(row) && discountOf(row) <= MAX_DISCOUNT_PCT),
+  ) as string;
+
+  const floorCity = [...new Set(listings.map((row) => row.city))].find((city) =>
+    listings.some((row) => row.city === city && hasEstimate(row) && row.price < DEAL_MIN_PRICE),
+  ) as string;
+
+  const nullOnlyCity = [...new Set(listings.map((row) => row.city))].find((city) =>
+    listings.filter((row) => row.city === city).every((row) => row.estValue === null),
+  ) as string;
+
+  type DealFilters = { minPrice?: number; maxPrice?: number; beds?: number };
+  function expectedConsidered(city: string, filters: DealFilters = {}): number {
+    return listings.filter(
+      (row) =>
+        row.city === city &&
+        hasEstimate(row) &&
+        row.price >= DEAL_MIN_PRICE &&
+        (filters.minPrice === undefined || row.price >= filters.minPrice) &&
+        (filters.maxPrice === undefined || row.price <= filters.maxPrice) &&
+        (filters.beds === undefined || row.beds === filters.beds),
+    ).length;
+  }
+
+  function expectedMatches(city: string, minDiscount: number): Listing[] {
+    return listings
+      .filter(
+        (row) =>
+          row.city === city &&
+          hasEstimate(row) &&
+          row.price >= DEAL_MIN_PRICE &&
+          discountOf(row) >= minDiscount &&
+          discountOf(row) <= MAX_DISCOUNT_PCT,
+      )
+      .sort(
+        (a, b) =>
+          discountOf(b) - discountOf(a) ||
+          a.price - b.price ||
+          (a.address ?? "").localeCompare(b.address ?? ""),
+      );
+  }
+
+  it("returns null for an unknown city and a zeroed result for a city without estimates", () => {
+    expect(findDeals({ city: "atlantis" })).toBeNull();
+    expect(findDeals({ city: "" })).toBeNull();
+    expect(findDeals({ city: "   " })).toBeNull();
+
+    expect(nullOnlyCity).toBeDefined();
+    const empty = findDeals({ city: nullOnlyCity });
+    expect(empty).not.toBeNull();
+    expect(empty?.city).toBe(nullOnlyCity);
+    expect(empty?.considered).toBe(0);
+    expect(empty?.totalMatches).toBe(0);
+    expect(empty?.returned).toBe(0);
+    expect(empty?.listings).toEqual([]);
+  });
+
+  it("defaults minDiscount to the market_summary valuation metadata and clamps to [0, 60]", () => {
+    const meta = summary.valuation?.params.min_discount_pct;
+    expect(typeof meta).toBe("number");
+    expect(defaultMinDiscountPct()).toBe(meta ?? 15);
+
+    expect(findDeals({ city: dealCity })?.minDiscount).toBe(meta);
+    expect(findDeals({ city: dealCity, minDiscount: -10 })?.minDiscount).toBe(0);
+    expect(findDeals({ city: dealCity, minDiscount: 0 })?.minDiscount).toBe(0);
+    expect(findDeals({ city: dealCity, minDiscount: 999 })?.minDiscount).toBe(MAX_DISCOUNT_PCT);
+  });
+
+  it("counts considered from usable in-scope rows at or above the deal price floor", () => {
+    expect(floorCity).toBeDefined();
+    const result = findDeals({ city: floorCity, limit: 25 });
+    expect(result).not.toBeNull();
+    expect(result?.considered).toBe(expectedConsidered(floorCity));
+    expect(result?.considered).toBeLessThan(
+      listings.filter((row) => row.city === floorCity && hasEstimate(row)).length,
+    );
+    expect(result?.totalMatches).toBeLessThanOrEqual(result?.considered as number);
+
+    const scoped = findDeals({ city: dealCity, minPrice: 400_000, maxPrice: 900_000, beds: 3, limit: 25 });
+    expect(scoped?.considered).toBe(expectedConsidered(dealCity, { minPrice: 400_000, maxPrice: 900_000, beds: 3 }));
+    expect(scoped?.considered).toBeGreaterThan(0);
+    for (const row of scoped?.listings ?? []) {
+      expect(row.price).toBeGreaterThanOrEqual(400_000);
+      expect(row.price).toBeLessThanOrEqual(900_000);
+      expect(row.beds).toBe(3);
+    }
+  });
+
+  it("excludes rows without an estimate, under the price floor, and beyond the 60% cap", () => {
+    expect(capCity).toBeDefined();
+    const result = findDeals({ city: capCity, minDiscount: 0, limit: 25 });
+    expect(result).not.toBeNull();
+    expect(result?.totalMatches).toBe(expectedMatches(capCity, 0).length);
+    expect(expectedMatches(capCity, 0).length).toBeGreaterThan(0);
+    expect(
+      listings.some((row) => row.city === capCity && hasEstimate(row) && discountOf(row) > MAX_DISCOUNT_PCT),
+    ).toBe(true);
+    for (const row of result?.listings ?? []) {
+      expect(row.discountPct).toBeGreaterThanOrEqual(0);
+      expect(row.discountPct).toBeLessThanOrEqual(MAX_DISCOUNT_PCT);
+      expect(row.estValue).not.toBeNull();
+      expect(row.price).toBeGreaterThanOrEqual(DEAL_MIN_PRICE);
+    }
+  });
+
+  it("sorts discount descending then price then address, and returns copies with all 12 fields", () => {
+    const expected = expectedMatches(dealCity, dealDefault);
+    expect(expected.length).toBeGreaterThan(0);
+
+    const result = findDeals({ city: dealCity, limit: 25 });
+    expect(result).not.toBeNull();
+    expect(result?.totalMatches).toBe(expected.length);
+    expect(result?.returned).toBe(Math.min(25, expected.length));
+    expect(result?.listings).toEqual(expected.slice(0, 25));
+
+    for (let i = 1; i < (result?.listings.length ?? 0); i += 1) {
+      const previous = result?.listings[i - 1] as Listing;
+      const current = result?.listings[i] as Listing;
+      expect(discountOf(previous)).toBeGreaterThanOrEqual(discountOf(current));
+      if (previous.discountPct === current.discountPct) {
+        expect(previous.price).toBeLessThanOrEqual(current.price);
+        if (previous.price === current.price) {
+          expect((previous.address ?? "").localeCompare(current.address ?? "")).toBeLessThanOrEqual(0);
+        }
+      }
+    }
+
+    const first = result?.listings[0] as Listing;
+    const source = listings.find(
+      (row) => row.city === dealCity && row.address === first.address && row.url === first.url,
+    );
+    expect(source).toBeDefined();
+    expect(first).toEqual(source);
+    expect(first).not.toBe(source);
+    expect(Object.keys(first).length).toBe(12);
+    expect(Object.keys(first)).toContain("estValue");
+    expect(Object.keys(first)).toContain("discountPct");
+
+    expect(findDeals({ city: dealCity, limit: 25 })).toEqual(result);
+  });
+
+  it("defaults limit to 5 and clamps it to [1, 25]", () => {
+    const full = findDeals({ city: dealCity, limit: 999 });
+    expect(full?.returned).toBe(Math.min(25, full?.totalMatches as number));
+    expect(findDeals({ city: dealCity })?.returned).toBe(Math.min(5, full?.totalMatches as number));
+    expect(findDeals({ city: dealCity, limit: 0 })?.returned).toBe(1);
+  });
+
+  it("normalises city aliases like the other tools", () => {
+    expect(findDeals({ city: "St. Catharines" })).toEqual(findDeals({ city: "st-catharines" }));
+  });
+});
+
 describe("province filter", () => {
   const topProvince = listings.find((row) => row.city === topCity)?.province as string;
 
@@ -561,9 +744,9 @@ describe("province filter", () => {
 });
 
 describe("tool specs and implementations", () => {
-  it("exposes the four OpenAI-style specs", () => {
+  it("exposes the five OpenAI-style specs", () => {
     const names = TOOL_SPECS.map((spec) => spec.function.name);
-    expect(names).toEqual(["search_listings", "city_snapshot", "rank_areas", "compare_cities"]);
+    expect(names).toEqual(["search_listings", "city_snapshot", "rank_areas", "compare_cities", "find_deals"]);
     for (const spec of TOOL_SPECS) {
       expect(spec.type).toBe("function");
       expect(spec.function.description).toContain("never invent numbers");
@@ -648,6 +831,47 @@ describe("tool specs and implementations", () => {
       expect(properties.fsa?.description).toContain("rows without a postal code are excluded");
       expect(spec?.function.parameters.required).toEqual(["city"]);
     }
+  });
+
+  it("documents find_deals as a comparable-asking-price estimate, not an appraisal", () => {
+    const spec = TOOL_SPECS.find((entry) => entry.function.name === "find_deals");
+    const description = spec?.function.description ?? "";
+    expect(description).toContain("comparable-listings estimate");
+    expect(description).toContain("comparable asking prices");
+    expect(description).toContain("not sold prices");
+    expect(description).toContain("appraisal");
+    expect(description).toContain("noise margin");
+    const overallMdape = summary.valuation?.oof_mdape_pct;
+    if (typeof overallMdape === "number") expect(description).toContain(`±${Math.round(overallMdape)}%`);
+    expect(description).toContain("per-city error is shown in the app");
+    expect(description).toContain(`model artefacts and excluded`);
+    expect(description).toContain(`[minDiscount, ${MAX_DISCOUNT_PCT}]`);
+    expect(description).toContain("Returns null for an unknown city");
+
+    const properties = spec?.function.parameters.properties as unknown as Record<
+      string,
+      { minimum?: number; maximum?: number; description?: string }
+    >;
+    expect(properties.minDiscount?.minimum).toBe(0);
+    expect(properties.minDiscount?.maximum).toBe(MAX_DISCOUNT_PCT);
+    expect(properties.minDiscount?.description).toContain("valuation metadata");
+    expect(properties.limit?.maximum).toBe(25);
+    expect(properties.beds?.minimum).toBe(1);
+    expect(properties.beds?.maximum).toBe(12);
+    expect(spec?.function.parameters.required).toEqual(["city"]);
+
+    expect(TOOL_IMPLS.find_deals({ city: dealCity })).toEqual(findDeals({ city: dealCity }));
+    expect(TOOL_IMPLS.find_deals({ city: "atlantis" })).toBeNull();
+    expect(
+      TOOL_IMPLS.find_deals({
+        city: dealCity.toUpperCase(),
+        minDiscount: "15",
+        minPrice: "400000",
+        maxPrice: "900000",
+        beds: "3",
+        limit: "2",
+      }),
+    ).toEqual(findDeals({ city: dealCity, minDiscount: 15, minPrice: 400_000, maxPrice: 900_000, beds: 3, limit: 2 }));
   });
 
   it("documents the optional filters on the snapshot and rank_areas specs", () => {

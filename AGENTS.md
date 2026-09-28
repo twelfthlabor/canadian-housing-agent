@@ -17,12 +17,13 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   scrape tree; `--source <dir>` and `--out <dir>` point elsewhere. Overwrites tracked data, so only run it to refresh.
 - `npm run evals`: live, loads `.env.local` with Node 24, needs `GROQ_API_KEY`, sequential with `EVAL_DELAY_MS` default 2500.
   `MOCK_LLM=1 npm run evals`: plumbing only, no network, exit 0. Flags: `--category`, `--limit`, `--mock`. Writes
-  `evals/report.json` (gitignored). 44 golden cases (19 tool choice including multi-turn MT01-MT04 and capability
-  cases C01/C02, 12 numeric, 13 refusals); live bars: tool 0.9, numeric 0.95, refusal 1.0; mock scores are not a
-  quality signal. Partial runs cannot satisfy the full quality gate. Multi-turn cases run 2-3 user turns, score only
-  the final turn, and require a tool on the first turn; expectations may list `anyOf` alternatives; the report is
-  rewritten after each case, so an aborted run keeps partial results. Last completed full-suite pass: the 32-case
-  gate (2026-09-16); the 44-case suite has not completed a live run.
+  `evals/report.json` (gitignored). 47 golden cases (20 tool choice including multi-turn MT01-MT04, capability
+  cases C01/C02, and deal tool-choice D01; 14 numeric including deal cases ND01/ND02; 13 refusals); live bars: tool
+  0.9, numeric 0.95, refusal 1.0; mock scores are not a quality signal. Partial runs cannot satisfy the full
+  quality gate. Multi-turn cases run 2-3 user turns, score only the final turn, and require a tool on the first
+  turn; expectations may list `anyOf` alternatives; the report is rewritten after each case, so an aborted run keeps
+  partial results. Last completed full-suite pass: the 32-case gate (2026-09-16); the 47-case suite has not
+  completed a live run.
 
 ## Environment
 
@@ -43,7 +44,11 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   over the matching rows (`null` when nothing matches). `rank_areas` ranks a city's FSAs by `median_price` or `count`,
   keeps only areas with 5 or more matching listings, defaults to 5 rows (max 10), and returns `considered` (matching
   listings with an FSA) and `totalAreas` (areas that cleared the threshold). `search_listings` filters price, exact
-  beds, and FSA but not bathrooms; `rank_areas` and filtered snapshots do.
+  beds, and FSA but not bathrooms; `rank_areas` and filtered snapshots do. `find_deals` lists a city's listings
+  asking below the hmb-v1 estimate: optional `minDiscount` (default from the valuation metadata, fallback 15, clamped
+  0-60), `minPrice`/`maxPrice`, exact `beds`, and `limit` 1-25 (default 5); the result
+  `{city,minDiscount,considered,totalMatches,returned,listings}` is sorted by `discountPct` desc, and rows without a
+  usable estimate or below the $100,000 deal floor are excluded from `considered`; `null` for an unknown city.
 - FSA narrowing: `search_listings` takes an optional `fsa`; `city_snapshot` takes `{city, fsa}` (a bare string still
   works internally for `compare_cities`). Full postal codes reduce to the leading 3-character FSA (`"M6P 1A1"` ->
   `"M6P"`); rows without an FSA are excluded when a filter is set, and a scoped snapshot returns null when the FSA
@@ -61,8 +66,8 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   feed.
 - Chat provenance (`components/Chat.tsx`): tool-using answers render a collapsed "How this answer was computed"
   block with the raw tool id, the raw arguments the model sent (humanized where known: city, beds, minPrice/maxPrice,
-  fsa, sort, bathsMin, metric, order, limit), and the muted result summary. Cached answers replay the stored tool
-  events, so the block renders on cache hits too.
+  fsa, sort, bathsMin, minDiscount, metric, order, limit), and the muted result summary. Cached answers replay the
+  stored tool events, so the block renders on cache hits too.
 - `/api/chat` SSE events: `text`, `tool`, `tool_result`, `cached`, `done`, `error`. `tool_result` carries `data` with
   the raw result: search `{totalMatches, returned, listings}` (rows as-is), snapshot object, compare array. Mismatched
   `Origin` -> 403 and non-exact `application/json` -> 415, both before rate limiting; GET -> 405. Node runtime (not
@@ -77,13 +82,26 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   id is never emitted), filter, write `data/listings.json` + `data/market_summary.json`. Default `--source` is the
   sibling `../property-scraper/data/regions`; `--out` defaults to `data/`. `lib/dataset.ts` imports both tracked files
   directly (no database, no runtime reads). No enriched/local export mode exists; don't reintroduce one.
-- Rows in `data/listings.json` are exactly `{city,province,fsa,price,beds,baths,sqft,seen,address,url}` (35,566 rows, 123
-  cities, 11 provinces). Address and source URL are intentionally published; never reintroduce `listing_id`, agent names, or scraped
-  source pages into tracked data. `sqft` outside 200-20,000 is nulled (land acreage bug); per-city `medianSqft` is
-  null under 10 samples.
+- `pipeline/valuation.py` (`hmb-v1`) is stdlib-only and deterministic (no RNG or clock; `crc32` duplicate-aware
+  grouped fold assignment): a hierarchical median-residual model on `ln(price)` whose published estimates are 5-fold
+  out-of-fold predictions plus
+  one median bias correction; only cities with 30+ rows are estimated, and `min_discount_pct` is measured at build
+  time (max(15, ceil(OOF MdAPE/5)*5), capped 60). `market_summary.valuation` carries the overall `oof_mdape_pct`, the
+  per-city `oof_mdape_pct_by_city` map (shown in the UI as each city's typical error), and `min_discount_pct`, which
+  `find_deals` and `/api/listings` read at runtime. `build_dataset.py` runs it in the same refresh: no extra step,
+  dependency, or network call.
+- Rows in `data/listings.json` are exactly
+  `{city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct}` (42,888 rows, 123 cities, 11
+  provinces). `estValue` is a positive integer CAD rounded to the nearest $1,000; `discountPct` has one decimal and is
+  positive when the asking price is below the estimate; both are null for listings in cities with fewer than 30 rows
+  (195 rows today). Address and source URL are intentionally published; never reintroduce `listing_id`, agent names, or
+  scraped source pages into tracked data. `sqft` outside 200-20,000 is nulled (land acreage bug); per-city `medianSqft`
+  is null under 10 samples.
 - `/api/listings` GET serves the Data tab: JSON `{total, returned, listings}` for one city (default limit 100, capped
-  at 200, sorted by price), or `?format=csv` returning all rows as `city,province,fsa,price,beds,baths,sqft,seen,address,url`
-  (RFC 4180 quoting, formula-looking cells prefixed with `'`, serialized once per server process).
+  at 200), `sort=price` (ascending, the default) or `sort=discount` (descending, with `minDiscount` defaulting to the
+  valuation meta threshold and clamped 0-60), or `?format=csv` returning all rows with the header
+  `city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct` (`null` -> empty cell; RFC 4180
+  quoting, formula-looking cells prefixed with `'`, serialized once per server process).
 - Atlas URL state (`components/Workspace.tsx`): city, compare, sort, max, tab, and view are mirrored with one-way
   `replaceState`; defaults are omitted, `max` snaps to the 50k slider step, and unknown params fall back to defaults.
   Share-only: back/forward does not resync it.
@@ -96,7 +114,7 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
 
 ## Don't
 
-- Never hand-edit `data/*.json`: change the pipeline and regenerate. The ~4.6 MB JSON is tracked on purpose; don't
+- Never hand-edit `data/*.json`: change the pipeline and regenerate. The ~13 MB JSON is tracked on purpose; don't
   gitignore it.
 - `../property-scraper` is a read-only data source: never modify it or run its scraper from here.
 - Never commit, push, deploy, or enable provider billing: free tier only. Never print keys into logs or client code.

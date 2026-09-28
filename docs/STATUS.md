@@ -1,3 +1,30 @@
+# Project status: 2026-09-28 (valuation; 2026-09-22 below)
+
+## Assessment (2026-09-28)
+
+Valuation is in the uncommitted working tree: `pipeline/valuation.py`
+(`hmb-v1`, stdlib only, deterministic) writes `estValue`/`discountPct` into
+every row of `data/listings.json` during `python3 pipeline/build_dataset.py`
+(refresh flow unchanged), `market_summary.json` carries the `valuation`
+metadata block (`min_discount_pct` 20 today), the agent has a `find_deals`
+tool, and `/api/listings` gained `sort=discount` + `minDiscount` plus a
+12-column CSV. Measured on the tracked snapshot: coverage 99.5% (42,693 of
+42,888 rows; 103 cities estimated), OOF MdAPE 19.1% after the duplicate-aware
+grouped fold fix (per-city values published as `oof_mdape_pct_by_city`), OOF
+bias 0.0%; the 195 rows in the 20 cities with fewer than 30 rows have null
+estimates.
+
+Local verification for this note: a pipeline rebuild to a temp directory was
+byte-identical to the tracked `data/listings.json` (market summary equal
+ignoring `generated_at`) and printed the numbers above. Test inventories, not
+run here: 187 vitest tests in 8 files, 36 pipeline tests; the eval suite is 47
+cases (20 tool choice incl. D01, 14 numeric incl. ND01/ND02, 13 refusals).
+The 47-case suite still has no completed live run; the last full pass remains
+the 32-case gate of 2026-09-16.
+
+The 2026-09-22 assessment below describes the corpus before this feature and
+before the latest data refresh (its 35,566-row counts are that date's).
+
 # Project status: 2026-09-22 (Canada-wide corpus; 2026-09-17 below)
 
 ## Assessment (2026-09-22)

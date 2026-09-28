@@ -63,6 +63,15 @@ export default function Workspace({ summary, offline }: Props) {
   const searchRef = useRef<HTMLInputElement>(null);
   const snap = summary.cities[selected];
   const activeFilter = ceiling < 2_000_000 || Boolean(query);
+  // Valuation metadata for the data tab and chat cards; fallbacks cover older data files.
+  const valuationMeta = summary.valuation;
+  const mdapeByCity = valuationMeta?.oof_mdape_pct_by_city;
+  const valuation = {
+    minDiscountPct: valuationMeta?.params.min_discount_pct ?? 15,
+    maxDiscountPct: valuationMeta?.params.max_discount_pct ?? 60,
+    mdapePct: typeof valuationMeta?.oof_mdape_pct === "number" ? valuationMeta.oof_mdape_pct : null,
+    mdapeByCity: mdapeByCity && typeof mdapeByCity === "object" && !Array.isArray(mdapeByCity) ? mdapeByCity : {},
+  };
 
   const visible = useMemo(() => cities.filter(city => cityName(city).toLowerCase().includes(query.toLowerCase().trim()) && (ceiling === 2_000_000 || summary.cities[city].medianPrice <= ceiling)).sort((a, b) => {
     if (sort === "low") return summary.cities[a].medianPrice - summary.cities[b].medianPrice;
@@ -156,14 +165,14 @@ export default function Workspace({ summary, offline }: Props) {
             {detailView === "overview" ? <div className="tray-content" key={`${selected}-overview`}><p className="tray-price">{money(snap.medianPrice)}<span>median asking price</span></p><div className="tray-stats"><span><strong>{snap.count.toLocaleString("en-CA")}</strong>sampled listings</span><span><strong>{Math.round(snap.shareUnder1M * 100)}%</strong>asking under $1m</span></div></div> : <div className="tray-content tray-bedrooms" key={`${selected}-beds`}><p>Median asking price by bedroom count</p>{Object.entries(snap.medianByBeds).map(([bed, price]) => <div key={bed}><span>{bed} bed</span><span className="mini-track"><i style={{ width: `${price === null ? 0 : price / Math.max(...Object.values(snap.medianByBeds).map(value => value ?? 0)) * 100}%` }} /></span><strong>{price === null ? "No data" : compactMoney(price)}</strong></div>)}</div>}
             <div className="tray-actions"><button onClick={() => compareCity(selected)}><Icon name="compare" />Compare</button><button onClick={() => ask(`Give me a market snapshot of ${cityName(selected)}`)}>Ask about this city<Icon name="arrow" /></button></div>
           </section> : <div className="map-filter-message"><strong>{visible.length ? "Choose a city to explore." : "No cities match your filters."}</strong><span>Select a visible map marker or clear your search.</span><button onClick={() => { setQuery(""); setCeiling(2_000_000); }}>Clear filters</button></div>}
-        </MapCanvas> : view === "compare" ? <Comparison cities={summary.cities} pair={pair} setPair={setPair} onAsk={() => ask(`Compare ${cityName(pair[0])} and ${cityName(pair[1])}`)} /> : <DataTable cities={cities} city={selected} onCityChange={setSelected} totalRows={summary.totals.rows} />}
+        </MapCanvas> : view === "compare" ? <Comparison cities={summary.cities} pair={pair} setPair={setPair} onAsk={() => ask(`Compare ${cityName(pair[0])} and ${cityName(pair[1])}`)} /> : <DataTable cities={cities} city={selected} onCityChange={setSelected} totalRows={summary.totals.rows} valuation={valuation} />}
       </section>
       <div className="mobile-view-switch" role="group" aria-label="Mobile explorer view"><button aria-pressed={mobileView === "map" && view !== "data"} onClick={() => { if (view === "data") setView("explore"); setMobileView("map"); }}><Icon name="map" />{view === "compare" ? "Comparison" : "Map"}</button><button aria-pressed={mobileView === "list"} onClick={() => setMobileView("list")}><Icon name="list" />Cities</button><button aria-pressed={view === "data" && mobileView === "map"} onClick={() => { setView("data"); setMobileView("map"); }}><Icon name="database" />Data</button></div>
     </main>
 
     <dialog className="agent-dialog" ref={agentDialog} aria-label="Housing research assistant" onClick={event => { if (event.target === event.currentTarget) agentDialog.current?.close(); }}>
       <div className="dialog-top"><span><span className="agent-orb" />Housing research</span><button aria-label="Close agent" onClick={() => agentDialog.current?.close()}><Icon name="close" /></button></div>
-      <Chat offline={offline} draft={draft} />
+      <Chat offline={offline} draft={draft} valuation={valuation} />
     </dialog>
     <dialog className="about-dialog" ref={aboutDialog} aria-labelledby="about-title" onClick={event => { if (event.target === event.currentTarget) aboutDialog.current?.close(); }}>
       <div className="dialog-top"><span>About the atlas</span><button aria-label="Close dataset information" onClick={() => aboutDialog.current?.close()}><Icon name="close" /></button></div>

@@ -43,7 +43,9 @@ def report_number(output: str, label: str) -> int:
     return int(match.group(1))
 
 
-EXPECTED_LISTINGS = [
+# Fixture builds are far below MIN_CITY_ROWS, so every published estimate is
+# null; the 10 transformed fields still have to match exactly.
+EXPECTED_LISTINGS = [dict(row, estValue=None, discountPct=None) for row in [
     {
         "city": "ottawa",
         "province": "ON",
@@ -176,7 +178,7 @@ EXPECTED_LISTINGS = [
         "address": "6688 Cambie St, Vancouver, BC V6P 0E6",
         "url": "https://example.com/v1",
     },
-]
+]]
 
 
 class PipelineEndToEnd(unittest.TestCase):
@@ -211,16 +213,26 @@ class PipelineEndToEnd(unittest.TestCase):
         self.assertEqual(report_number(out, "implausible sqft (nulled)"), 2)
         self.assertEqual(report_number(out, "fsa/province mismatch (nulled)"), 1)
         self.assertEqual(report_number(out, "cities"), 3)
+        self.assertIn("Valuation report", out)
+        self.assertIn("min discount: 15%", out)
 
     def test_listings_sorted_and_transformed(self):
         self.assertEqual(self.listings, EXPECTED_LISTINGS)
         for row in self.listings:
             self.assertEqual(
                 set(row),
-                {"city", "province", "fsa", "price", "beds", "baths", "sqft", "seen", "address", "url"},
+                {
+                    "city", "province", "fsa", "price", "beds", "baths", "sqft", "seen",
+                    "address", "url", "estValue", "discountPct",
+                },
             )
             self.assertTrue(row["address"])
             self.assertTrue(row["url"])
+
+    def test_valuation_nulls_are_paired(self):
+        for row in self.listings:
+            self.assertIsNone(row["estValue"])
+            self.assertIsNone(row["discountPct"])
 
     def test_province_comes_from_dir_slug(self):
         by_url = {row["url"]: row for row in self.listings}
@@ -301,6 +313,21 @@ class PipelineEndToEnd(unittest.TestCase):
             vancouver["medianByBeds"],
             {"1": None, "2": 914000, "3": None, "4": None, "5+": None},
         )
+
+    def test_valuation_meta_block(self):
+        valuation = self.summary["valuation"]
+        self.assertEqual(valuation["method"], "hmb-v1")
+        self.assertEqual(valuation["coverage_pct"], 0)
+        self.assertEqual(valuation["cities_estimated"], 0)
+        self.assertIsNone(valuation["oof_mdape_pct"])
+        self.assertIsNone(valuation["oof_bias_pct"])
+        self.assertEqual(valuation["oof_mdape_pct_top_cities"], {})
+        self.assertEqual(valuation["oof_mdape_pct_by_city"], {})
+        self.assertEqual(valuation["params"]["min_discount_pct"], 15)
+        self.assertEqual(valuation["params"]["max_discount_pct"], 60)
+        self.assertEqual(valuation["params"]["deal_min_price"], 100000)
+        self.assertEqual(valuation["params"]["folds"], 5)
+        self.assertEqual(valuation["params"]["min_city_rows"], 30)
 
     def test_idempotent_across_runs(self):
         with tempfile.TemporaryDirectory() as other_tmp:

@@ -1,23 +1,26 @@
 # Canadian Housing Agent
 
 A free public demo where visitors chat with a tool-calling LLM agent about a
-research sample of 35,566 Canadian for-sale listings across 123 cities in 11 provinces. The agent
+research sample of 42,888 Canadian for-sale listings across 123 cities in 11 provinces. The agent
 answers questions like "median asking price for a 3-bed in Hamilton?" or "how
 many listings are in M6P?" by calling deterministic search and stats functions
 over a JSON dataset. Numbers come from those functions; the model picks tools
 and writes the reply. Search and snapshot tools accept a 3-character FSA (a full
 postal code is reduced to it), and snapshots accept price, bedroom, and
 minimum-bath filters. The agent can also rank a city's postal areas by median
-asking price or listing count. Search answers render up to six listing cards
-(each with its address and a link to the source listing) and a sample-size line.
-Tool-using answers include a collapsed "How this answer was computed" block with
-the raw tool calls. The atlas has a Data tab with a CSV export, and its state
-(city, compare pair, sort, price ceiling, tab, view) is mirrored into the URL so
-a view can be shared.
+asking price or listing count, and it can surface listings asking below an
+offline comparable-listings estimate (`find_deals`): the estimated typical
+asking price from comparable asking prices, not an appraisal, sold price, or
+investment advice. Search answers render up to six listing cards (each with its
+address and a link to the source listing) and a sample-size line. Tool-using
+answers include a collapsed "How this answer was computed" block with the raw
+tool calls. The atlas has a Data tab with a CSV export and a biggest-discount
+sort, and its state (city, compare pair, sort, price ceiling, tab, view) is
+mirrored into the URL so a view can be shared.
 
 Live demo: https://ontario-housing-agent.vercel.app
 
-Not a valuation tool, listing service, or source of financial advice. See
+Not an appraisal service, listing service, or source of financial advice. See
 [Disclaimers](#disclaimers).
 
 ## Who it is for
@@ -48,9 +51,10 @@ without `MOCK_LLM=1`. The app shows an offline-demo notice when using scripted r
 Both Next.js and `npm run evals` load `.env.local`; exported environment variables
 take precedence for the eval command. Restart the server after changing providers or data.
 
-`npm run evals` runs the 44 golden cases (19 tool choice, including 4
-multi-turn cases and 2 capability cases for filtered snapshots and area
-rankings plus 3 Canada tool cases; 12 numeric; 13 refusals) and needs `GROQ_API_KEY` for live scoring;
+`npm run evals` runs the 47 golden cases (20 tool choice, including 4
+multi-turn cases, 2 capability cases for filtered snapshots and area rankings,
+3 Canada tool cases, and 1 deal case; 14 numeric, including 2 deal cases; 13
+refusals) and needs `GROQ_API_KEY` for live scoring;
 without a key it exits 1 with instructions. `MOCK_LLM=1 npm run evals` runs the
 plumbing only. Each run writes `evals/report.json`, which is gitignored, and
 the harness updates it after every case so an aborted run keeps partial
@@ -58,7 +62,7 @@ results. Reports include the answers and tool arguments for diagnosis. Live
 bars: tool choice >= 0.90, numeric >= 0.95, refusals 1.00. `quality_gate_passed`
 stays false for mock runs and partial runs (`--limit` or `--category` selecting
 fewer than all cases), even if their selected cases pass. The last completed
-full live pass is the 32-case gate from 2026-09-16; the 44-case suite has not
+full live pass is the 32-case gate from 2026-09-16; the 47-case suite has not
 completed a live run (2026-09-17 attempts hit the Groq free-tier daily token
 cap).
 
@@ -83,14 +87,16 @@ property-scraper/  (separate repo; read-only here)
   data/regions/<city>/listings.csv
         |
         v
-pipeline/build_dataset.py   dedupe by listing id -> filter -> extract FSA -> write ten fields
+pipeline/build_dataset.py   dedupe by listing id -> filter -> extract FSA -> hmb-v1
+                            valuation -> write twelve fields (incl. estValue/discountPct)
         |
         v
-data/listings.json          35,566 listings incl. province, address + source URL
+data/listings.json          42,888 listings incl. province, address, source URL,
+                            estValue + discountPct
 data/market_summary.json    per-city aggregates
         |
         v
-lib/tools.ts                deterministic search/stats (incl. rank_areas) + OpenAI-style tool schemas
+lib/tools.ts                deterministic search/stats (incl. rank_areas, find_deals) + OpenAI-style tool schemas
         |
         v
 /api/chat (Next.js)         agent loop, streamed over SSE
@@ -117,7 +123,7 @@ ontario-housing-agent/
 ├── app/                      Next.js app: /api/chat SSE route, /api/listings JSON+CSV route, atlas UI
 ├── components/               atlas and chat UI components (DataTable.tsx backs the Data tab)
 ├── tests/                    vitest: tools, agent, guards, cache route, listings route, providers, observability, eval scoring
-└── evals/                    38 golden cases + run.ts harness (npm run evals; report.json gitignored)
+└── evals/                    47 golden cases + run.ts harness (npm run evals; report.json gitignored)
 ```
 
 ## Documentation
@@ -133,10 +139,18 @@ ontario-housing-agent/
   It includes each listing's address and a link to the source listing; listing
   ids, agent names, and scraped source pages are not published. Not affiliated
   with Zillow.
-- Asking prices only; no sold prices. Square footage covers about 20% of rows and
-  varies by city; values outside a plausible 200-20,000 sqft range (for example,
-  land listings whose acreage the source renders as interior square feet) are
-  treated as missing. The sample is a single snapshot and can be stale.
+- Asking prices only; no sold prices. Square footage covers 56.3% of rows and is
+  city-skewed (near complete in Calgary, Surrey, and Vancouver; about 1% in
+  Toronto and nearly none in Ottawa); values outside a plausible 200-20,000 sqft
+  range (for example, land listings whose acreage the source renders as interior
+  square feet) are treated as missing. The sample is a single snapshot and can be
+  stale.
+- `estValue`/`discountPct` estimate the typical asking price from comparable
+  asking prices — not an appraisal, not sold prices, not investment advice. They
+  use no property type, condition, lot, or sold data and are null for listings in
+  cities with fewer than 30 rows. Estimates typically err by about ±19%, shown
+  per city in the UI; deal lists only show discounts between 20% and 60%, and
+  bigger gaps are treated as model artefacts, not deals.
 - Nothing here is financial, legal, or real-estate advice.
 - The demo runs on free tiers: Groq for the model and Vercel Hobby for hosting.
   Exhausting the daily free-tier token quota can make it unavailable during

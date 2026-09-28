@@ -4,6 +4,7 @@ import {
   createGeminiProvider,
   createGroqProvider,
   createMockProvider,
+  mockToolCallFor,
 } from "../lib/providers";
 import type { ChatMessage, Provider, ProviderEvent } from "../lib/providers";
 
@@ -74,6 +75,100 @@ describe("mock provider", () => {
     const text = textOf(await collect(createMockProvider()));
     expect(text).toContain("Canadian");
     expect(text.toLowerCase()).not.toContain("sanitized");
+  });
+});
+
+describe("mock deal handling", () => {
+  it("chooses find_deals for deal keywords and parses an explicit threshold", () => {
+    expect(mockToolCallFor("Find undervalued listings in Brampton")).toMatchObject({
+      name: "find_deals",
+      args: { city: "brampton" },
+    });
+    expect(mockToolCallFor("What is the largest discount among Calgary's current deal listings?")).toMatchObject({
+      name: "find_deals",
+      args: { city: "calgary" },
+    });
+    expect(
+      mockToolCallFor("How many listings in Brampton are at least 15% below the comparable-listings estimate?"),
+    ).toMatchObject({ name: "find_deals", args: { city: "brampton", minDiscount: 15 } });
+    // A bed-filtered cheapest question stays a listing search.
+    expect(mockToolCallFor("Cheapest 3-bed houses in Ottawa")).toMatchObject({ name: "search_listings" });
+  });
+
+  it("keeps cheap(est) and generic below questions off find_deals", () => {
+    // Pre-existing mock choice for these phrasings: no bed filter -> city_snapshot.
+    expect(mockToolCallFor("What's the cheapest house in Windsor?")).toMatchObject({
+      name: "city_snapshot",
+      args: { city: "windsor" },
+    });
+    expect(mockToolCallFor("Show me listings in Guelph below $700,000")).toMatchObject({
+      name: "city_snapshot",
+      args: { city: "guelph" },
+    });
+  });
+
+  it("quotes the top discount from a find_deals result", async () => {
+    const events = await collectFrom(createMockProvider(), [
+      { role: "user", content: "Find undervalued listings in Brampton" },
+      {
+        role: "tool",
+        name: "find_deals",
+        content: JSON.stringify({
+          city: "brampton",
+          minDiscount: 20,
+          considered: 928,
+          totalMatches: 2,
+          returned: 2,
+          listings: [
+            {
+              city: "brampton",
+              beds: 3,
+              price: 469950,
+              address: "900 Central Park Dr #36",
+              url: "https://example.test/a",
+              estValue: 923000,
+              discountPct: 49.1,
+            },
+            {
+              city: "brampton",
+              beds: 2,
+              price: 399900,
+              address: "157 Fleetwood Cres",
+              url: "https://example.test/b",
+              estValue: 732000,
+              discountPct: 45.4,
+            },
+          ],
+        }),
+      },
+    ]);
+    const text = textOf(events);
+    expect(text).toContain("2 listings in Brampton at least 20% below the comparable-listings estimate");
+    expect(text).toContain("49.1% below estimate");
+    expect(text).toContain("900 Central Park Dr #36");
+    expect(text).toContain("https://example.test/a");
+    expect(text).not.toContain("45.4");
+  });
+
+  it("answers an empty find_deals result without inventing numbers", async () => {
+    const events = await collectFrom(createMockProvider(), [
+      { role: "user", content: "Any deals in Brampton?" },
+      {
+        role: "tool",
+        name: "find_deals",
+        content: JSON.stringify({
+          city: "brampton",
+          minDiscount: 20,
+          considered: 4,
+          totalMatches: 0,
+          returned: 0,
+          listings: [],
+        }),
+      },
+    ]);
+    expect(textOf(events)).toBe(
+      "No Brampton listings in the sample are more than 20% below the comparable-listings estimate (4 listings considered).",
+    );
   });
 });
 

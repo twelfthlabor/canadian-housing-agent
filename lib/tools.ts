@@ -1,7 +1,9 @@
-import { listings } from "./dataset";
+import { listings, summary } from "./dataset";
 import type {
   AreaRank,
   CitySnapshot,
+  FindDealsQuery,
+  FindDealsResult,
   Listing,
   RankAreasQuery,
   RankAreasResult,
@@ -18,6 +20,31 @@ const BED_BUCKETS = ["1", "2", "3", "4", "5+"];
 const RANK_DEFAULT_LIMIT = 5;
 const RANK_MAX_LIMIT = 10;
 const MIN_AREA_LISTINGS = 5;
+const FALLBACK_MIN_DISCOUNT_PCT = 15;
+
+/** Price floor for deal listings, shared by find_deals and the listings route. */
+export const DEAL_MIN_PRICE = 100_000;
+/** Discounts above this are data artefacts of the offline model, not deals. */
+export const MAX_DISCOUNT_PCT = 60;
+
+/**
+ * Overall MdAPE for the find_deals description, read from the valuation block so a
+ * recalibrated dataset does not leave a stale percentage in the LLM-facing text.
+ */
+function overallMdapeText(): string {
+  const value = summary.valuation?.oof_mdape_pct;
+  return typeof value === "number" && Number.isFinite(value) ? `about ±${Math.round(value)}% overall` : "several percent overall";
+}
+
+/**
+ * Effective deal threshold: data-derived from the market_summary valuation
+ * block, with a fixed fallback for older data files that have no block. Never
+ * hardcode 20/15 at a call site; resolve through here.
+ */
+export function defaultMinDiscountPct(): number {
+  const value = summary.valuation?.params?.min_discount_pct;
+  return typeof value === "number" && Number.isFinite(value) ? value : FALLBACK_MIN_DISCOUNT_PCT;
+}
 
 const byCity = new Map<string, Listing[]>();
 for (const listing of listings) {
@@ -277,6 +304,60 @@ export function rankAreas(query: RankAreasQuery): RankAreasResult | null {
   };
 }
 
+/** An estimate is usable only when the pipeline wrote both fields. */
+function hasUsableEstimate(row: Listing): boolean {
+  return (
+    typeof row.estValue === "number" &&
+    Number.isFinite(row.estValue) &&
+    typeof row.discountPct === "number" &&
+    Number.isFinite(row.discountPct)
+  );
+}
+
+/**
+ * Listings asking below the offline comparable-listings estimate, biggest
+ * discount first. Rows below the deal price floor, without an estimate, or
+ * beyond MAX_DISCOUNT_PCT are excluded; null for an unknown city.
+ */
+export function findDeals(query: FindDealsQuery): FindDealsResult | null {
+  const key = normaliseCity(query?.city);
+  const rows = byCity.get(key);
+  if (!rows) return null;
+
+  const requested = finiteOrUndefined(query?.minDiscount);
+  const minDiscount = Math.min(Math.max(requested ?? defaultMinDiscountPct(), 0), MAX_DISCOUNT_PCT);
+  const filters = filtersFrom(query ?? {});
+
+  const considered: Listing[] = [];
+  for (const row of rows) {
+    if (!matchesFilters(row, filters)) continue;
+    if (!hasUsableEstimate(row) || row.price < DEAL_MIN_PRICE) continue;
+    considered.push(row);
+  }
+
+  const matches = considered.filter(
+    (row) => (row.discountPct as number) >= minDiscount && (row.discountPct as number) <= MAX_DISCOUNT_PCT,
+  );
+  const sorted = matches
+    .slice()
+    .sort(
+      (a, b) =>
+        (b.discountPct as number) - (a.discountPct as number) ||
+        a.price - b.price ||
+        (a.address ?? "").localeCompare(b.address ?? ""),
+    );
+  const limit = normaliseLimit(query?.limit);
+
+  return {
+    city: key,
+    minDiscount,
+    considered: considered.length,
+    totalMatches: matches.length,
+    returned: Math.min(limit, sorted.length),
+    listings: sorted.slice(0, limit).map((row) => ({ ...row })),
+  };
+}
+
 export function compareCities(cities: string[]): CitySnapshot[] {
   if (!Array.isArray(cities)) return [];
   const result: CitySnapshot[] = [];
@@ -479,6 +560,56 @@ export const TOOL_SPECS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "find_deals",
+      description:
+        `Find listings asking below the comparable-listings estimate: an offline estimate of the typical asking price for similar listings, computed from this sample's comparable asking prices. It is not sold prices, an appraisal, or a prediction. ` +
+        `The deal window is a price of at least $${DEAL_MIN_PRICE.toLocaleString("en-CA")} and a discount in [minDiscount, ${MAX_DISCOUNT_PCT}]; rows outside it are not returned. ` +
+        `Returns city, the applied minDiscount, considered (scoped listings with a usable estimate and a price at or above the ${DEAL_MIN_PRICE.toLocaleString("en-CA")} deal floor), totalMatches (considered listings with discountPct in range), and the top deals sorted by discountPct descending. ` +
+        `discountPct is the percent below the estimate (positive = asking below). Discounts inside the model's noise margin are not meaningful: estimates typically err by ${overallMdapeText()}, per-city error is shown in the app and can be much higher in small cities. Discounts above the ${MAX_DISCOUNT_PCT}% maximum are treated as model artefacts and excluded. ` +
+        `Returns null for an unknown city. Use this for undervalued, bargain, deal, or discount questions. ${NEVER_INVENT}`,
+      parameters: {
+        type: "object",
+        properties: {
+          city: {
+            type: "string",
+            description: 'City name, case-insensitive (for example "brampton").',
+          },
+          minDiscount: {
+            type: "number",
+            minimum: 0,
+            maximum: 60,
+            description:
+              "Minimum discount percent below the estimate, inclusive. Defaults to the dataset's deal threshold from market_summary valuation metadata (15 when that block is absent); clamped to [0, 60].",
+          },
+          minPrice: {
+            type: "number",
+            description: "Minimum asking price in CAD, inclusive.",
+          },
+          maxPrice: {
+            type: "number",
+            description: "Maximum asking price in CAD, inclusive.",
+          },
+          beds: {
+            type: "integer",
+            minimum: 1,
+            maximum: 12,
+            description: "Exact number of bedrooms.",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 25,
+            description: "Maximum deals to return. Defaults to 5, capped at 25.",
+          },
+        },
+        required: ["city"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 function asString(value: unknown): string {
@@ -533,4 +664,13 @@ export const TOOL_IMPLS: Record<string, (args: any) => unknown> = {
     compareCities(
       Array.isArray(args?.cities) ? args.cities.map(asString).filter((city: string) => city !== "") : [],
     ),
+  find_deals: (args: any) =>
+    findDeals({
+      city: asString(args?.city),
+      minDiscount: asNumber(args?.minDiscount),
+      minPrice: asNumber(args?.minPrice),
+      maxPrice: asNumber(args?.maxPrice),
+      beds: asNumber(args?.beds),
+      limit: asNumber(args?.limit),
+    }),
 };

@@ -3,14 +3,17 @@
 
 Reads raw scrape output (one listings.csv per region directory) and writes:
 
-  data/listings.json        kept rows, sorted city asc / price desc
-  data/market_summary.json  per-city statistics for the UI
+  data/listings.json        kept rows, sorted city asc / price desc, each row
+                            carrying estValue/discountPct from the hmb-v1
+                            valuation (null in cities with too few rows)
+  data/market_summary.json  per-city statistics for the UI plus the
+                            "valuation" metadata block
 
 Region directories are named <city>-<prov> (e.g. toronto-on, vancouver-bc);
 the 2-letter province suffix is authoritative for the row's province field.
 City keys stay bare (no collisions exist across provinces; the build fails if
 one ever appears). The raw scrape tree is treated as strictly read-only.
-Standard library only.
+Standard library only; the valuation model lives in pipeline/valuation.py.
 """
 
 from __future__ import annotations
@@ -24,6 +27,13 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# The sibling valuation module is importable when this file runs as a script;
+# the explicit path keeps it importable under importlib-based test loading too.
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+from valuation import estimate_listings  # noqa: E402
 
 # Resolved relative to the repo root so the pipeline carries no machine paths;
 # pass --source to read from anywhere else.
@@ -457,6 +467,18 @@ def print_report(
     print(f"  wrote: {out / 'market_summary.json'}")
 
 
+def print_valuation_report(meta: dict, worst_cities: list[tuple[str, float]]) -> None:
+    print("Valuation report")
+    print(f"  method: {meta['method']}")
+    print(f"  coverage: {meta['coverage_pct']}% ({meta['cities_estimated']} cities estimated)")
+    print(f"  oof MdAPE: {meta['oof_mdape_pct']}%")
+    print(f"  oof bias: {meta['oof_bias_pct']}%")
+    print(f"  min discount: {meta['params']['min_discount_pct']}%")
+    if worst_cities:
+        rendered = ", ".join(f"{city} {value}%" for city, value in worst_cities)
+        print(f"  worst cities: {rendered}")
+
+
 def build(source: Path, out: Path) -> tuple[list[dict], dict, dict, dict]:
     records, stats, csv_paths = dedupe(source)
     assert_unique_city_stems(csv_paths)
@@ -474,11 +496,18 @@ def build(source: Path, out: Path) -> tuple[list[dict], dict, dict, dict]:
             f"malformed={stats['malformed']} duplicate={stats['duplicate']}"
         )
 
+    estimates, valuation_meta, worst_cities = estimate_listings(listings)
+    for row, (est_value, discount_pct) in zip(listings, estimates):
+        row["estValue"] = est_value
+        row["discountPct"] = discount_pct
+
     summary = build_summary(listings, generated_timestamp())
+    summary["valuation"] = valuation_meta
     out.mkdir(parents=True, exist_ok=True)
     write_json(out / "listings.json", listings)
     write_json(out / "market_summary.json", summary)
     print_report(stats, drops, nulled, fsa_mismatch, listings, source, out)
+    print_valuation_report(valuation_meta, worst_cities)
     return listings, summary, stats, drops
 
 

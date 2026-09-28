@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import { cityName, money } from "./format";
+import { VALUATION_FALLBACK, mdapeText, type ValuationInfo } from "./DataTable";
 
 type ToolChip = {
   id: string;
@@ -22,6 +23,8 @@ type ListingCard = {
   fsa: string | null;
   url?: string;
   address?: string;
+  estValue: number | null;
+  discountPct: number | null;
 };
 
 /** Basis line count and its priority: a search beats a snapshot, which beats a compare sum. */
@@ -71,7 +74,7 @@ function toolLabel(name: string, args: unknown): string {
         .join(", ");
     }
   }
-  const friendlyName = ({ city_snapshot: "City snapshot", compare_cities: "City comparison", rank_areas: "Area ranking", search_listings: "Listing search" } as Record<string, string>)[name] ?? "Sample lookup";
+  const friendlyName = ({ city_snapshot: "City snapshot", compare_cities: "City comparison", rank_areas: "Area ranking", search_listings: "Listing search", find_deals: "Deal finder" } as Record<string, string>)[name] ?? "Sample lookup";
   return suffix ? `${friendlyName} · ${suffix}` : friendlyName;
 }
 
@@ -99,6 +102,7 @@ function argNode(key: string, value: unknown): ReactNode {
   if (key === "beds" && typeof value === "number") return `${value} ${value === 1 ? "bed" : "beds"}`;
   if (key === "bathsMin" && typeof value === "number") return `≥ ${value} ${value === 1 ? "bath" : "baths"}`;
   if ((key === "minPrice" || key === "maxPrice") && typeof value === "number") return `${key === "minPrice" ? "≥" : "≤"} ${money(value)}`;
+  if (key === "minDiscount" && typeof value === "number") return `≥ ${value}% below estimate`;
   if (key === "sort" && typeof value === "string") return SORT_LABELS[value] ?? value;
   if (key === "metric" && typeof value === "string") return METRIC_LABELS[value] ?? value;
   if (key === "order" && typeof value === "string") return ORDER_LABELS[value] ?? value;
@@ -153,6 +157,8 @@ function readCard(value: unknown): ListingCard | null {
     sqft: finiteNumber(row.sqft),
     city: row.city,
     fsa: typeof row.fsa === "string" && row.fsa ? row.fsa : null,
+    estValue: finiteNumber(row.estValue),
+    discountPct: finiteNumber(row.discountPct),
   };
   if (typeof row.url === "string" && row.url.startsWith("https://")) card.url = row.url;
   if (typeof row.address === "string" && row.address.trim()) card.address = row.address.trim();
@@ -194,6 +200,13 @@ function readCount(name: string, data: unknown): Basis | null {
     }
     return sum > 0 ? { value: sum, rank: 0 } : null;
   }
+  if (name === "find_deals") {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+    const record = data as Record<string, unknown>;
+    const count = finiteNumber(record.considered) ?? finiteNumber(record.totalMatches);
+    if (count === null || count <= 0) return null;
+    return { value: count, rank: 2 };
+  }
   return null;
 }
 
@@ -205,7 +218,24 @@ function cardMeta(card: ListingCard): string {
   return parts.join(" · ");
 }
 
-export default function Chat({ offline, draft }: { offline: boolean; draft: { text: string; id: number } | null }) {
+/** Typical error note for deal badges: city MdAPE first, overall as fallback. */
+function errorNote(city: string, mdapePct: number | null, mdapeByCity: Record<string, number>): string {
+  const mdape = mdapeByCity[city] ?? mdapePct;
+  return typeof mdape === "number" ? `; estimates typically err by about ±${mdapeText(mdape)}%` : "";
+}
+
+/** Deal badge tooltip: exact estimate plus the typical error, city first then overall. */
+function dealTooltip(city: string, estValue: number, mdapePct: number | null, mdapeByCity: Record<string, number>): string {
+  return `Estimated typical asking price: ${money(estValue)}${errorNote(city, mdapePct, mdapeByCity)}`;
+}
+
+/** Screen-reader label: the visible percent, the estimate, and the same error note. */
+function dealAria(city: string, estValue: number, discountPct: number, mdapePct: number | null, mdapeByCity: Record<string, number>): string {
+  return `${Math.round(discountPct)}% below estimated typical asking price of ${money(estValue)}${errorNote(city, mdapePct, mdapeByCity)}`;
+}
+
+export default function Chat({ offline, draft, valuation }: { offline: boolean; draft: { text: string; id: number } | null; valuation?: Partial<ValuationInfo> }) {
+  const { minDiscountPct, maxDiscountPct, mdapePct, mdapeByCity } = { ...VALUATION_FALLBACK, ...valuation };
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -325,7 +355,7 @@ export default function Chat({ offline, draft }: { offline: boolean; draft: { te
             }
             case "tool_result": {
               const name = typeof event.name === "string" ? event.name : "";
-              const search = name === "search_listings" ? readSearch(event.data) : null;
+              const search = name === "search_listings" || name === "find_deals" ? readSearch(event.data) : null;
               const basis = readCount(name, event.data);
               setMessages((prev) =>
                 updateLastAssistant(prev, (message) => {
@@ -407,6 +437,7 @@ export default function Chat({ offline, draft }: { offline: boolean; draft: { te
             <ul className="listing-cards" aria-label={`${message.search.cards.length} of ${message.search.total.toLocaleString("en-CA")} matching sample listings`}>
               {message.search.cards.map((card, cardIndex) => <li className="listing-card" key={cardIndex}>
                 <strong className="listing-card-price">{money(card.price)}</strong>
+                {card.discountPct !== null && card.estValue !== null && card.discountPct >= minDiscountPct && card.discountPct <= maxDiscountPct ? <span className="deal-badge listing-card-deal" title={dealTooltip(card.city, card.estValue, mdapePct, mdapeByCity)} aria-label={dealAria(card.city, card.estValue, card.discountPct, mdapePct, mdapeByCity)}>{Math.round(card.discountPct)}% below est.</span> : null}
                 {cardMeta(card) ? <span className="listing-card-meta">{cardMeta(card)}</span> : null}
                 {card.address ? <span className="listing-card-address">{card.address}</span> : null}
                 <span className="listing-card-city">{card.fsa ? <span className="listing-card-fsa">{card.fsa}</span> : null}{cityName(card.city)}</span>
