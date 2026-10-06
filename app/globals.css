@@ -96,7 +96,6 @@ button { background: none; border: 0; }
 .is-dragging .map-surface { cursor: grabbing; }
 .basemap { display: block; width: 100%; height: 100%; }
 .land { fill: #e9ece4; stroke: #c9d2c7; stroke-width: .8; vector-effect: non-scaling-stroke; }
-.ontario-land { fill: var(--land); }
 .lake { fill: var(--map); stroke: #c8d9d7; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .map-labels, .marker-leaders, .map-points { position: absolute; inset: 0; pointer-events: none; }
 .province-label { position: absolute; font: 17px var(--mono); letter-spacing: 8px; color: #778b766b; transform: translate(-50%, -50%); white-space: nowrap; }
@@ -378,7 +377,7 @@ dialog[open] { animation: dialog-enter 220ms var(--ease); }
   .row-compare { opacity: 1; pointer-events: auto; right: 7px; border: none; background: transparent; }
   .city-row:hover .row-price, .city-row:focus-within .row-price { opacity: 1; }
   .index-footer { padding: 14px 26px; }
-  .index-about { display: inline-grid; place-items: center; }
+  .index-about { display: inline-grid; place-items: center; min-width: 24px; min-height: 24px; }
   .map-heading { top: 29px; left: 22px; }
   .map-heading h1 { font-size: 36px; letter-spacing: -1.8px; }
   .map-heading p { display: none; }

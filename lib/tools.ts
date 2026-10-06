@@ -1,4 +1,5 @@
 import { listings, summary } from "./dataset";
+import { retrieveDocs } from "./rag";
 import type {
   AreaRank,
   CitySnapshot,
@@ -610,6 +611,34 @@ export const TOOL_SPECS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_docs",
+      description:
+        `Search the project's own documentation (README.md, docs/DATA.md, docs/DEMO.md, docs/PLAN.md) for how this project, its data pipeline, and the hmb-v1 estimate work. ` +
+        `Use this for questions about the project or model itself; statistics questions still use the data tools. ` +
+        `Returns the matching passages with their source file and section heading, most similar first. ` +
+        `Use this tool for project mechanics; never invent numbers.`,
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: 'Natural-language question about the project or its documentation (for example "how does the hmb-v1 estimate work?").',
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 10,
+            description: "Maximum passages to return. Defaults to 5, capped at 10.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 function asString(value: unknown): string {
@@ -673,4 +702,9 @@ export const TOOL_IMPLS: Record<string, (args: any) => unknown> = {
       beds: asNumber(args?.beds),
       limit: asNumber(args?.limit),
     }),
+  search_docs: (args: any) => {
+    const query = asString(args?.query);
+    const results = retrieveDocs(query, asNumber(args?.limit));
+    return { query, returned: results.length, results };
+  },
 };

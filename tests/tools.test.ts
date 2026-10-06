@@ -744,9 +744,16 @@ describe("province filter", () => {
 });
 
 describe("tool specs and implementations", () => {
-  it("exposes the five OpenAI-style specs", () => {
+  it("exposes the six OpenAI-style specs", () => {
     const names = TOOL_SPECS.map((spec) => spec.function.name);
-    expect(names).toEqual(["search_listings", "city_snapshot", "rank_areas", "compare_cities", "find_deals"]);
+    expect(names).toEqual([
+      "search_listings",
+      "city_snapshot",
+      "rank_areas",
+      "compare_cities",
+      "find_deals",
+      "search_docs",
+    ]);
     for (const spec of TOOL_SPECS) {
       expect(spec.type).toBe("function");
       expect(spec.function.description).toContain("never invent numbers");

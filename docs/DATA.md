@@ -9,7 +9,7 @@ Raw listings come from the separate `property-scraper` project, treated as
 read-only here: per-region CSVs of current listings at
 `../property-scraper/data/regions/<city>-<prov>/listings.csv`.
 
-The published snapshot covers 123 cities in 11 provinces with 42,888 rows
+The published snapshot covers 123 cities in 11 provinces with 50,014 rows
 after cleaning. A rebuild reads the newest scrape tree, so its row count
 follows the scrape data and can differ from the tracked snapshot (see
 [Refresh](#refresh)).
@@ -42,8 +42,8 @@ It writes:
 - Current for-sale asking listings.
 - 123 cities in 11 provinces (every region with scraped rows; 36 zero-row
   northern regions emit nothing).
-- 42,888 rows in the published snapshot after dedupe and filtering (a rebuild
-  from a newer scrape tree can carry more). 195 of them (in the 20 cities with
+- 50,014 rows in the published snapshot after dedupe and filtering (a rebuild
+  from a newer scrape tree can carry more). 198 of them (in the 19 cities with
   fewer than 30 rows) carry null `estValue`/`discountPct`.
 
 ## Cleaning rules
@@ -54,12 +54,12 @@ Applied during the build:
    never written.
 2. **Price floor**: keep rows with price >= $50,000.
 3. **Canada only**: drop rows whose address carries no Canadian province code
-   (145 US-spillover rows in this build, counted as `non-CA address`).
+   (148 rows in this build, counted as `non-CA address`).
 4. **Sane beds/baths**: drop implausible counts (bounds in
    `pipeline/build_dataset.py`).
 5. **Plausible sqft**: values outside 200-20,000 sqft become `null`; the row
    is kept. They are counted as `implausible sqft (nulled)` in the filter
-   report (116 in this build).
+   report (131 in this build).
    The low tail is land acreage: for vacant-land listings the feed renders
    acreage as "N sqft lot", so the scraper extracts acreage as interior area (a
    known 50-acre Innisfil landholding arrived as `sqft` 50). The high tail is
@@ -69,7 +69,7 @@ Applied during the build:
    for the directory province (A=NL, B=NS, C=PE, E=NB, G/H/J=QC,
    K/L/M/N/P=ON, R=MB, S=SK, T=AB, V=BC, X=NT/NU, Y=YT). A mismatch becomes
    `null`; the row is kept and counted as `fsa/province mismatch (nulled)`
-   (21 in this build, never a drop).
+   (24 in this build, never a drop).
 7. **Emit twelve fields**: `city`, `province`, `fsa`, `price`, `beds`, `baths`,
    `sqft`, `seen`, `address`, `url`, plus `estValue` and `discountPct` from the
    valuation pass (see [Valuation](#valuation-hmb-v1)). Listing ids and agent
@@ -84,7 +84,7 @@ Applied during the build:
 | --- | --- |
 | `city` | One of the covered cities (bare stem, e.g. `vancouver`). |
 | `province` | 2-letter province code from the region directory (e.g. `BC`). |
-| `fsa` | Forward Sortation Area, derived at build time; `null` for the 715 rows without a usable postal code (694 spaceless codes such as `A1W3G6`, mostly NL; 21 FSA/province mismatches). |
+| `fsa` | Forward Sortation Area, derived at build time; `null` for the 799 rows without a usable postal code (775 without a parseable code, mostly spaceless NL codes such as `A1W3G6`; 24 FSA/province mismatches). |
 | `price` | Asking price, as listed. |
 | `beds` | Bedroom count. |
 | `baths` | Bathroom count. |
@@ -101,7 +101,7 @@ City lookups accept natural spellings (e.g. "St. Catharines", "Sault Ste. Marie"
 
 ## CSV export
 
-`GET /api/listings?format=csv` returns all 42,888 rows with the header
+`GET /api/listings?format=csv` returns all 50,014 rows with the header
 `city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct`.
 A `null` field (for example `fsa`, or an estimate in a small city) becomes an
 empty cell. Values are quoted per
@@ -113,14 +113,14 @@ process and served with a one-hour browser / one-day CDN cache.
 ## Square footage
 
 `sqft` is missing for about half the rows and coverage varies by city. The
-plausibility rule above nulled 116 values in the tracked snapshot. 56.3% of
-kept rows carry `sqft` (24,155 of 42,888); non-null values range from 204 to
-19,610. Coverage is city-skewed: near complete in Calgary, Surrey, and
+plausibility rule above nulled 131 values in the tracked snapshot. 56.7% of
+kept rows carry `sqft` (28,356 of 50,014); non-null values range from 204 to
+19,898. Coverage is city-skewed: near complete in Calgary, Surrey, and
 Vancouver; about 1% in Toronto; near zero in Ottawa. Because missingness is
 not random, per-square-foot comparisons across cities are unreliable.
 
 `data/market_summary.json` reports a per-city `medianSqft` over plausible values
-only, and `null` when a city has fewer than 10 sqft samples. 28 of 123 cities
+only, and `null` when a city has fewer than 10 sqft samples. 27 of 123 cities
 fall below that bar.
 
 ## Valuation (hmb-v1)
@@ -139,10 +139,10 @@ signal remains and the reported OOF MdAPE is a lower bound on the error for a
 genuinely new property. In-sample fits are never published; one median bias
 correction is applied.
 
-- Coverage is 99.5% (42,693 of 42,888 rows, 103 cities). The 195 rows in cities
+- Coverage is 99.6% (49,816 of 50,014 rows, 104 cities). The 198 rows in cities
   with fewer than 30 rows carry `null`.
-- Out-of-fold accuracy on the tracked snapshot: MdAPE 19.1%, bias 0.0%. The
-  per-city MdAPE for all 103 estimated cities is published as
+- Out-of-fold accuracy on the tracked snapshot: MdAPE 19%, bias 0.0%. The
+  per-city MdAPE for all 104 estimated cities is published as
   `valuation.oof_mdape_pct_by_city`; the UI shows the selected city's value as
   its typical error next to the estimates.
 - Deal threshold: `market_summary.valuation.params.min_discount_pct` is
@@ -188,21 +188,21 @@ a human clears it in the attach Chrome and the next run resumes the queue.
 
 - **Asking prices only.** No sold prices, so the data says nothing about
   transaction values or market direction.
-- **Sparse, skewed square footage.** `sqft` is present for 56.3% of rows
-  (24,155 of 42,888) but is not missing at random: coverage is near complete in
+- **Sparse, skewed square footage.** `sqft` is present for 56.7% of rows
+  (28,356 of 50,014) but is not missing at random: coverage is near complete in
   Calgary, Surrey, and Vancouver, about 1% in Toronto, and near zero in Ottawa;
-  28 of 123 city `medianSqft` values are suppressed below 10 samples, and
+  27 of 123 city `medianSqft` values are suppressed below 10 samples, and
   implausible values (lot acreage, commercial floor area) are excluded. Within a
   comparable-listings cell in Toronto, Ottawa, Mississauga, or London, ranking
   largely reflects price rather than size. Treat per-square-foot comparisons
   with care.
 - **Estimates, not appraisals.** `estValue`/`discountPct` are computed from
   comparable asking prices only: no sold prices, property type, condition, lot,
-  or year-built data. Out-of-fold MdAPE is 19.1% on this snapshot, so the 20%
+  or year-built data. Out-of-fold MdAPE is 19% on this snapshot, so the 20%
   deal threshold is the model's noise margin, not evidence that a listing is
   mispriced.
 - **Valuation coarseness.** Estimates are group medians; rows in cities with
-  fewer than 30 listings get none (195 rows in 20 cities today), and small
+  fewer than 30 listings get none (198 rows in 19 cities today), and small
   cities are valued from few comparables, so their estimates are coarse.
 - **Single snapshot.** The current build keeps no history, so price changes and
   price cuts cannot be computed. Adding that would require snapshot archiving in
@@ -211,7 +211,7 @@ a human clears it in the attach Chrome and the next run resumes the queue.
   runs, so the app can lag the newest scrape data until then; a Zillow
   challenge or an interrupted queue can leave it a few days old until a human
   clears the challenge.
-- **Duplicate rows.** Dedupe is by listing id only. 1,020 rows still repeat another
+- **Duplicate rows.** Dedupe is by listing id only. 1,053 rows still repeat another
   row on the seven non-address fields (city, FSA, price, beds, baths, sqft,
   seen) while differing in address/url, which can slightly overstate
   identical-looking segments. This is intentional.

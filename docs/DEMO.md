@@ -1,7 +1,7 @@
 # Demo script (2-3 minutes)
 
 A run-through for recording the live demo. Open
-https://ontario-housing-agent.vercel.app, let the atlas load, then use the chat
+https://canadian-housing-agent.vercel.app, let the atlas load, then use the chat
 panel. Ask the questions below in one chat: the follow-up depends on the
 history, and a new chat starts fresh. Record when the Groq free tier has quota
 left, or run locally against a key (`npm run dev`); the offline mock cannot do
@@ -14,7 +14,7 @@ Before recording:
   server-side for 15 minutes, so a warm-up on a scripted question would play
   back as a cache hit. Budget a minute for the atlas to settle.
 - Open a second tab on the shareable Data URL, for example
-  https://ontario-housing-agent.vercel.app/?city=toronto&view=data
+  https://canadian-housing-agent.vercel.app/?city=toronto&view=data
 
 ## Questions and what each one shows
 
@@ -38,7 +38,7 @@ The questions run about 100 seconds. Then show the affordances:
 2. Listing links: scroll the cards from question 2 and open one "View listing"
    link in a new tab, then close it.
 3. Data tab: in the atlas, open Data, switch the city, and click
-   "Download CSV · 42,888 rows". The file is the full published snapshot.
+   "Download CSV · 50,014 rows". The file is the full published snapshot.
 4. Shareable URL: change the city, sort, or price ceiling, then copy the
    address bar into the second tab. City, compare pair, sort, price ceiling,
    tab, and view are restored. Back and forward do not resync the view.

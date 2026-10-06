@@ -206,7 +206,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "would run: (cd $APP_REPO && python3 pipeline/build_dataset.py)"
     echo "would run: (cd $APP_REPO && python3 -m unittest discover -s pipeline/tests -q)"
     echo "would run: (cd $APP_REPO && MOCK_LLM=1 npm test)"
-    echo "would run: (cd $APP_REPO && git commit -m \"Refresh Ontario listing dataset ($NEWEST_CSV_DATE scrape)\" -- data/listings.json data/market_summary.json && git push origin main)"
+    echo "would run: (cd $APP_REPO && git commit -m \"Refresh Canada listing dataset ($NEWEST_CSV_DATE scrape)\" -- data/listings.json data/market_summary.json && git push origin main)"
   fi
   if [ "$DO_REFRESH" -eq 1 ]; then
     REFRESH_REPORT="planned (dry-run)"

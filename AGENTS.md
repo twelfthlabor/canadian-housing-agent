@@ -6,7 +6,7 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
 ## Commands
 
 - `npm test`: vitest run over all tests under tests/ (tools, agent, guards, cache route, listings route, providers,
-  observability, eval scoring). Single file: `MOCK_LLM=1 npx vitest run tests/tools.test.ts`.
+  observability, rag, mcp, langfuse, eval scoring). Single file: `MOCK_LLM=1 npx vitest run tests/tools.test.ts`.
 - `npx tsc --noEmit`: typecheck. No linter or formatter is configured; don't add one.
 - `npm run build`: next build, also typechecks. Next 16 rewrites `tsconfig.json` on build (adds its type includes):
   review the diff instead of reverting, keep TypeScript at 5.9.x. `next-env.d.ts` is gitignored (Next regenerates it).
@@ -15,14 +15,25 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   3.11. Single test: add `-k <pattern>` (e.g. `-p test_build_dataset.py -k dedupe`).
 - `python3 pipeline/build_dataset.py`: rebuilds `data/listings.json` + `data/market_summary.json` from the sibling
   scrape tree; `--source <dir>` and `--out <dir>` point elsewhere. Overwrites tracked data, so only run it to refresh.
+- `npm run embed:docs`: regenerates `data/docs_index.json` (deterministic, byte-identical) from README.md +
+  docs/{DATA,DEMO,PLAN}.md; it imports only the pure encoder (`lib/embed.ts`), so it also works when the index is
+  missing. The index is tracked like `data/listings.json`: regenerate after editing any source doc and commit it
+  with those changes. `lib/rag.ts` imports the index, so `npm test` / `npm run build` need it to exist.
+- `npm run mcp`: MCP stdio server (`tsx mcp/server.ts`). npm's script banner goes to stdout, so MCP clients should
+  spawn `npx --yes tsx <absolute-repo-path>/mcp/server.ts` (cwd-independent); stdout is protocol-only, diagnostics
+  go to stderr. Read-only tools, no model calls.
+- `npm run seed:pgvector [-- --query "<text>"]`: optional local pgvector demo (`docker compose up -d` first;
+  `DATABASE_URL` defaults to `postgres://postgres:postgres@localhost:5432/agent`). Not used at runtime; the success
+  path is unverified here (Docker not installed), but failing without Postgres is clean (exit 1).
 - `npm run evals`: live, loads `.env.local` with Node 24, needs `GROQ_API_KEY`, sequential with `EVAL_DELAY_MS` default 2500.
   `MOCK_LLM=1 npm run evals`: plumbing only, no network, exit 0. Flags: `--category`, `--limit`, `--mock`. Writes
-  `evals/report.json` (gitignored). 47 golden cases (20 tool choice including multi-turn MT01-MT04, capability
-  cases C01/C02, and deal tool-choice D01; 14 numeric including deal cases ND01/ND02; 13 refusals); live bars: tool
+  `evals/report.json` (gitignored). 48 golden cases (21 tool choice including multi-turn MT01-MT04, capability
+  cases C01/C02, deal tool-choice D01, and docs tool-choice T14; 14 numeric including deal cases ND01/ND02; 13
+  refusals); live bars: tool
   0.9, numeric 0.95, refusal 1.0; mock scores are not a quality signal. Partial runs cannot satisfy the full
   quality gate. Multi-turn cases run 2-3 user turns, score only the final turn, and require a tool on the first
   turn; expectations may list `anyOf` alternatives; the report is rewritten after each case, so an aborted run keeps
-  partial results. Last completed full-suite pass: the 32-case gate (2026-09-16); the 47-case suite has not
+  partial results. Last completed full-suite pass: the 32-case gate (2026-09-16); the 48-case suite has not
   completed a live run.
 
 ## Environment
@@ -32,14 +43,27 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
 - Live mode needs `GROQ_API_KEY`; put it in `.env.local` (gitignored: `.env.example` lists the names). `GROQ_MODEL`
   overrides the default `openai/gpt-oss-120b`. `GEMINI_API_KEY` (+ optional `GEMINI_MODEL`) is a fallback only when
   Groq fails before emitting.
-- CI (`.github/workflows/ci.yml`): `npm ci`, `MOCK_LLM=1` vitest, `npm run build`, python unittest: Node 24 /
-  Python 3.11. Evals are intentionally not in CI.
+- Langfuse tracing is optional: set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` (+ optional `LANGFUSE_BASE_URL`)
+  to enable metadata-only traces (turn duration/cache/tool names/error code; per-tool durations). Without both keys
+  it is a full no-op. `DATABASE_URL` (optional) is read only by `npm run seed:pgvector`.
+- CI (`.github/workflows/ci.yml`): `npm ci`, docs-index freshness (`npm run embed:docs && git diff --exit-code --
+  data/docs_index.json`), `MOCK_LLM=1` vitest, `npm run build`, python unittest: Node 24 / Python 3.11. Evals are
+  intentionally not in CI.
 
 ## Invariants
 
 - `lib/tools.ts` is the single source of truth for tool schemas (`TOOL_SPECS`), implementations (`TOOL_IMPLS`),
   stats, and city alias normalization (`"St. Catharines"` -> `st-catharines`). Keep it deterministic, synchronous,
   free of LLM/network imports.
+- `lib/embed.ts` is the pure deterministic encoder (`hash-v1`, 256 dims, FNV-1a over word unigrams + char 4-grams,
+  L2-normalized) with no index import, so scripts can use it on a fresh checkout. `lib/rag.ts` adds the generated
+  index (`data/docs_index.json`, 84 chunks today; each chunk is embedded as heading + text, the stored text is
+  unchanged) and cosine search, and re-exports the encoder. Both are synchronous, keyless, and free of network/LLM
+  imports. The index is generated by `npm run embed:docs`; never hand-edit it, and commit it with doc edits (CI
+  checks freshness). `search_docs` wraps it; blank queries return no results and `limit` clamps to 1-10.
+- `mcp/server.ts` reuses `TOOL_SPECS`/`TOOL_IMPLS` verbatim (schemas passed through; currently all six tools,
+  including `search_docs`) and exposes only deterministic lookups. Keep it transport-only: no model calls, no side
+  effects.
 - Tool surface behavior: `city_snapshot` accepts optional `minPrice`/`maxPrice`/`beds`/`bathsMin` and computes stats
   over the matching rows (`null` when nothing matches). `rank_areas` ranks a city's FSAs by `median_price` or `count`,
   keeps only areas with 5 or more matching listings, defaults to 5 rows (max 10), and returns `considered` (matching
@@ -62,8 +86,12 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   `budget_exhausted`); real details stay in server logs.
 - `lib/observability.ts` writes one metadata-only JSON line per operational event: `chat_turn` per turn
   (`durationMs`, `cached`, `tools`, `errorCode`) and `rate_limited`. Content-like keys are stripped before logging;
-  never log messages, keys, or IPs. Langfuse is still not built (it needs account keys); these lines are the intended
-  feed.
+  never log messages, keys, or IPs. Optional Langfuse traces carry the same metadata when keys are set (see the
+  Environment bullet); these lines remain the keyless fallback.
+- `lib/langfuse.ts` (called from `app/api/chat/route.ts`) sends metadata only while both keys are set: one
+  `chat_turn` trace (`durationMs`, `cached`, `tools`, `errorCode`) plus one span per tool call (`tool:<name>`,
+  `durationMs`). Never send messages, answers, tool arguments, queries, keys, or IPs; never throw (disabled = no-op;
+  the SDK is imported lazily only when enabled).
 - Chat provenance (`components/Chat.tsx`): tool-using answers render a collapsed "How this answer was computed"
   block with the raw tool id, the raw arguments the model sent (humanized where known: city, beds, minPrice/maxPrice,
   fsa, sort, bathsMin, minDiscount, metric, order, limit), and the muted result summary. Cached answers replay the
@@ -91,10 +119,10 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   `find_deals` and `/api/listings` read at runtime. `build_dataset.py` runs it in the same refresh: no extra step,
   dependency, or network call.
 - Rows in `data/listings.json` are exactly
-  `{city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct}` (42,888 rows, 123 cities, 11
+  `{city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct}` (50,014 rows, 123 cities, 11
   provinces). `estValue` is a positive integer CAD rounded to the nearest $1,000; `discountPct` has one decimal and is
   positive when the asking price is below the estimate; both are null for listings in cities with fewer than 30 rows
-  (195 rows today). Address and source URL are intentionally published; never reintroduce `listing_id`, agent names, or
+  (198 rows today). Address and source URL are intentionally published; never reintroduce `listing_id`, agent names, or
   scraped source pages into tracked data. `sqft` outside 200-20,000 is nulled (land acreage bug); per-city `medianSqft`
   is null under 10 samples.
 - `/api/listings` GET serves the Data tab: JSON `{total, returned, listings}` for one city (default limit 100, capped

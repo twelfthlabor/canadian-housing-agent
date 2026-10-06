@@ -74,7 +74,7 @@ function toolLabel(name: string, args: unknown): string {
         .join(", ");
     }
   }
-  const friendlyName = ({ city_snapshot: "City snapshot", compare_cities: "City comparison", rank_areas: "Area ranking", search_listings: "Listing search", find_deals: "Deal finder" } as Record<string, string>)[name] ?? "Sample lookup";
+  const friendlyName = ({ city_snapshot: "City snapshot", compare_cities: "City comparison", rank_areas: "Area ranking", search_listings: "Listing search", find_deals: "Deal finder", search_docs: "Docs search" } as Record<string, string>)[name] ?? "Sample lookup";
   return suffix ? `${friendlyName} · ${suffix}` : friendlyName;
 }
 

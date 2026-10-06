@@ -1,4 +1,4 @@
-# CI for the Ontario Housing Agent. Runs on GitHub-hosted runners: free on
+# CI for the Canadian Housing Agent. Runs on GitHub-hosted runners: free on
 # public repositories, and no secrets are required (LLM calls are mocked).
 name: CI
 
@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Docs index is fresh
+        run: npm run embed:docs && git diff --exit-code -- data/docs_index.json
       - name: Test
         run: npx vitest run
         env:

@@ -127,6 +127,17 @@ export function mockToolCallFor(
   const q = question.toLowerCase();
   const cities = matchedCities(question);
 
+  // Project/mechanics questions go to the docs retriever before any city or
+  // deal branch can claim them.
+  const docsIntent =
+    q.includes("hmb") ||
+    q.includes("how is the estimate") ||
+    q.includes("typical error") ||
+    q.includes("how does this project");
+  if (docsIntent) {
+    return { id: "mock_docs", name: "search_docs", args: { query: question, limit: 3 } };
+  }
+
   if (q.includes("compare") && cities.length >= 2) {
     return { id: "mock_compare", name: "compare_cities", args: { cities: [cities[0], cities[1]] } };
   }
@@ -254,6 +265,18 @@ export function mockAnswerFromToolResult(message: ChatMessage): string {
         ).toLocaleString("en-CA")} listings`,
     );
     return `${parts.join(". ")}.`;
+  }
+
+  if (message.name === "search_docs") {
+    const result = data as {
+      query?: string;
+      results?: Array<{ source?: string; heading?: string }>;
+    } | null;
+    const top = result?.results?.[0];
+    if (!top) return "No project documentation matched that question.";
+    return `I found ${result?.results?.length ?? 0} project documentation passage(s); the closest is from ${
+      top.source ?? "the docs"
+    }${top.heading ? ` ("${top.heading}")` : ""}.`;
   }
 
   return "Here is what the sample shows for that question.";

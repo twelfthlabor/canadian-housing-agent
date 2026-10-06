@@ -13,11 +13,16 @@ import {
   takeRateLimit,
 } from "@/lib/guards";
 import type { CachedDisplayEvent } from "@/lib/guards";
+import { traceChatTurn } from "@/lib/langfuse";
 import { logEvent } from "@/lib/observability";
 import { getProvider } from "@/lib/providers";
+import { TOOL_SPECS } from "@/lib/tools";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Tool names the model is allowed to call; keeps arbitrary model text out of traces. */
+const KNOWN_TOOL_NAMES = new Set(TOOL_SPECS.map((spec) => spec.function.name));
 
 type IncomingBody = { messages?: unknown };
 
@@ -110,6 +115,8 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const toolNames: string[] = [];
+      const toolSpans: { name: string; startMs: number; endMs: number }[] = [];
+      const toolStarts = new Map<string, number>();
       const send = (event: AgentEvent) => {
         if (event.type === "tool" && !toolNames.includes(event.name)) {
           toolNames.push(event.name);
@@ -140,6 +147,14 @@ export async function POST(request: NextRequest) {
             },
           })) {
             if (event.type === "text") answer += event.delta;
+            if (event.type === "tool") toolStarts.set(event.name, Date.now());
+            if (event.type === "tool_result") {
+              const startMs = toolStarts.get(event.name);
+              if (startMs !== undefined) {
+                toolStarts.delete(event.name);
+                toolSpans.push({ name: event.name, startMs, endMs: Date.now() });
+              }
+            }
             if (event.type === "tool" || event.type === "tool_result") displayEvents.push(event);
             if (event.type === "done") completed = true;
             if (event.type === "error") {
@@ -163,12 +178,20 @@ export async function POST(request: NextRequest) {
           // Stream already closed.
         }
         // One metadata-only line per turn; never message content or headers.
+        const durationMs = Date.now() - startedAt;
         logEvent({
           event: "chat_turn",
-          durationMs: Date.now() - startedAt,
+          durationMs,
           cached: cached !== null,
           tools: toolNames,
           errorCode,
+        });
+        traceChatTurn({
+          durationMs,
+          cached: cached !== null,
+          tools: toolNames.filter((name) => KNOWN_TOOL_NAMES.has(name)),
+          errorCode,
+          toolSpans: toolSpans.filter((span) => KNOWN_TOOL_NAMES.has(span.name)),
         });
       }
     },
