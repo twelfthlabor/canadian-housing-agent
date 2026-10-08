@@ -12,9 +12,14 @@
 #
 # ../property-scraper is read-only: its region data, queue state, and regions
 # files are read, and pull_all_provinces.sh is launched for decision B.
-# The multi-province wrapper is launched bare (no --reopen): per-province
-# --reopen rejects foreign slugs, and the wrapper resumes each province
-# from its queue state.
+# Decision B launches the wrapper bare when only unfinished work is pending
+# (it resumes each province from its queue state), or with the wrapper-only
+# --reopen-all and --prune when the refresh is stale/forced, so `done` regions
+# re-scrape and delisted listings are removed.
+# Per-province --reopen is never passed directly here (it rejects foreign
+# slugs); the wrapper expands --reopen-all into each province's own slugs.
+# The wrapper flags passed here (--reopen-all, --prune) must exist in the
+# property-scraper checkout first; an older wrapper rejects unknown args.
 #
 # Usage: scripts/canada_refresh.sh [--dry-run] [--force-refresh]
 # Env:   APP_REPO, SCRAPER_REPO, STALE_DAYS (7), MIN_RUN_GAP_HOURS (24)
@@ -127,8 +132,14 @@ except Exception:
     print(0)' "$SCRAPER_REPO/data/regions/last-run-summary.json"
 )"
 HOURS_SINCE_LAST_RUN="n/a"
+LAST_RUN_STALE=0
 if [ "$LAST_RUN_EPOCH" -gt 0 ]; then
   HOURS_SINCE_LAST_RUN="$(( (NOW - LAST_RUN_EPOCH) / 3600 ))h"
+  # A perpetually-appending partial region keeps the newest CSV fresh, so the
+  # start time of the last queue run is the staleness backstop for prune.
+  if [ $(( NOW - LAST_RUN_EPOCH )) -gt $(( STALE_DAYS * 86400 )) ]; then
+    LAST_RUN_STALE=1
+  fi
 fi
 
 WORK_PENDING="$(
@@ -165,7 +176,11 @@ else
 fi
 
 # Decision B: start a refresh only when idle, with a start gap unless forced.
+# REOPEN_ARGS maps the trigger to the wrapper argv: stale/force reopens every
+# region (`done` included) and prunes delisted rows; pending-work-only resumes
+# the queue as-is.
 DO_REFRESH=0
+REOPEN_ARGS=""
 RECENT_START=0
 if [ "$LAST_RUN_EPOCH" -gt 0 ] && [ $(( NOW - LAST_RUN_EPOCH )) -lt $(( MIN_RUN_GAP_HOURS * 3600 )) ]; then
   RECENT_START=1
@@ -174,12 +189,13 @@ if [ "$RUNNING" = yes ]; then
   REFRESH_REPORT="skipped (scrape running)"
 elif [ "$FORCE_REFRESH" -eq 0 ] && [ "$RECENT_START" -eq 1 ]; then
   REFRESH_REPORT="skipped (last run started ${HOURS_SINCE_LAST_RUN} ago, within ${MIN_RUN_GAP_HOURS}h gap)"
-elif [ "$FORCE_REFRESH" -eq 1 ] || [ "$NEWEST_CSV_EPOCH" -eq 0 ] || [ $(( NOW - NEWEST_CSV_EPOCH )) -gt $(( STALE_DAYS * 86400 )) ]; then
+elif [ "$FORCE_REFRESH" -eq 1 ] || [ "$NEWEST_CSV_EPOCH" -eq 0 ] || [ $(( NOW - NEWEST_CSV_EPOCH )) -gt $(( STALE_DAYS * 86400 )) ] || [ "$LAST_RUN_STALE" -eq 1 ]; then
   DO_REFRESH=1
-  REFRESH_REPORT="planned"
+  REOPEN_ARGS="--reopen-all --prune"
+  REFRESH_REPORT="planned (stale or force)"
 elif [ "$WORK_PENDING" = true ]; then
   DO_REFRESH=1
-  REFRESH_REPORT="planned"
+  REFRESH_REPORT="planned (work pending)"
 else
   REFRESH_REPORT="skipped (data fresh)"
 fi
@@ -209,8 +225,12 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "would run: (cd $APP_REPO && git commit -m \"Refresh Canada listing dataset ($NEWEST_CSV_DATE scrape)\" -- data/listings.json data/market_summary.json && git push origin main)"
   fi
   if [ "$DO_REFRESH" -eq 1 ]; then
-    REFRESH_REPORT="planned (dry-run)"
-    echo "would run: (cd $SCRAPER_REPO && nohup scripts/pull_all_provinces.sh </dev/null >/dev/null 2>&1 &)"
+    REFRESH_REPORT="$REFRESH_REPORT (dry-run)"
+    echo "would run: (cd $SCRAPER_REPO && nohup scripts/pull_all_provinces.sh $REOPEN_ARGS </dev/null >/dev/null 2>&1 &)"
+    # The path the real run would name (the wrapper is not launched here).
+    WRAPPER_LOG="$SCRAPER_REPO/data/regions/logs/pull-$(date -u +%Y%m%dT%H%M%SZ).log"
+    [ -f "$WRAPPER_LOG" ] || WRAPPER_LOG="$WRAPPER_LOG (not found yet)"
+    echo "wrapper log: $WRAPPER_LOG"
   fi
   finish "success" 0
 fi
@@ -252,7 +272,14 @@ if [ "$DO_PUBLISH" -eq 1 ]; then
 fi
 
 if [ "$DO_REFRESH" -eq 1 ]; then
-  ( cd "$SCRAPER_REPO" && nohup scripts/pull_all_provinces.sh </dev/null >/dev/null 2>&1 & )
+  LAUNCH_EPOCH="$(date -u +%s)"
+  ( cd "$SCRAPER_REPO" && nohup scripts/pull_all_provinces.sh $REOPEN_ARGS </dev/null >/dev/null 2>&1 & )
+  # The wrapper tees to data/regions/logs/pull-<UTC>.log; name the newest file
+  # written since the launch so an unattended failure is findable from here.
+  sleep 2
+  WRAPPER_LOG="$(ls -1t "$SCRAPER_REPO/data/regions/logs"/pull-*.log 2>/dev/null | head -1 || true)"
+  [ -n "$WRAPPER_LOG" ] && [ "$(mtime "$WRAPPER_LOG")" -ge "$LAUNCH_EPOCH" ] || WRAPPER_LOG="(not found yet)"
+  echo "wrapper log: $WRAPPER_LOG"
   # The wrapper may spend ~20s launching the attach Chrome before any scraper
   # process appears, so confirm on the launcher itself too.
   STARTED=0
