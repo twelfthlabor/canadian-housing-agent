@@ -46,6 +46,10 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
   const [camera, setCamera] = useState(initial);
   const [dragging, setDragging] = useState(false);
   const drag = useRef<{ x: number; y: number; camera: typeof initial } | null>(null);
+  // Latest camera for handlers that start from it; a running glide is tracked so user input can cancel it.
+  const cameraRef = useRef(camera);
+  cameraRef.current = camera;
+  const glide = useRef<number | null>(null);
   const [extent, setExtent] = useState<"canada" | "metros">("canada");
   const [headingBox, setHeadingBox] = useState({ left: 0, top: 0, right: 0, bottom: 0 });
 
@@ -65,12 +69,41 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
     setHeadingBox({ left: box.left - rect.left, top: box.top - rect.top, right: box.right - rect.left, bottom: box.bottom - rect.top });
   }, [size]);
 
+  /** Eased camera move; instant under reduced motion. Any user pan or wheel input cancels it. */
+  function glideTo(target: typeof initial, duration = 640) {
+    if (glide.current !== null) cancelAnimationFrame(glide.current);
+    glide.current = null;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setCamera(target);
+      return;
+    }
+    const from = cameraRef.current;
+    const start = performance.now();
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCamera({
+        x: from.x + (target.x - from.x) * eased,
+        y: from.y + (target.y - from.y) * eased,
+        scale: from.scale + (target.scale - from.scale) * eased,
+      });
+      glide.current = progress < 1 ? requestAnimationFrame(step) : null;
+    };
+    glide.current = requestAnimationFrame(step);
+  }
+
+  function stopGlide() {
+    if (glide.current !== null) cancelAnimationFrame(glide.current);
+    glide.current = null;
+  }
+
   useEffect(() => {
     const element = container.current;
     if (!element) return;
     const wheel = (event: WheelEvent) => {
       if (event.target instanceof Element && event.target.closest("button, a, .city-tray, .map-filter-message")) return;
       event.preventDefault();
+      stopGlide();
       const rect = element.getBoundingClientRect();
       const offsetX = event.clientX - rect.left - rect.width / 2;
       const offsetY = event.clientY - rect.top - rect.height / 2;
@@ -86,14 +119,13 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
   useEffect(() => {
     const point = points[selected]?.point;
     if (!point) return;
-    setCamera(current => {
-      const x = (point[0] - current.x) * current.scale + size.width / 2;
-      const y = (point[1] - current.y) * current.scale + size.height / 2;
-      if (x < 90 || x > size.width - 90 || y < 140 || y > size.height - (size.width <= 640 ? 395 : 210)) {
-        return { ...current, x: point[0], y: point[1] + 80 / current.scale };
-      }
-      return current;
-    });
+    const current = cameraRef.current;
+    const x = (point[0] - current.x) * current.scale + size.width / 2;
+    const y = (point[1] - current.y) * current.scale + size.height / 2;
+    if (x < 90 || x > size.width - 90 || y < 140 || y > size.height - (size.width <= 640 ? 395 : 210)) {
+      glideTo({ ...current, x: point[0], y: point[1] + 80 / current.scale });
+    }
+    // Recentre only on a selection or resize change, not on every camera move.
   }, [selected, size.width, size.height]);
 
   function fit(canada: boolean) {
@@ -105,11 +137,12 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
     const minX = Math.min(...xs), maxX = Math.max(...xs);
     const minY = Math.min(...ys), maxY = Math.max(...ys);
     const scale = Math.max(.12, Math.min((size.width - 120) / (maxX - minX), (size.height - (size.width <= 640 ? 490 : 280)) / (maxY - minY), 1.4));
-    setCamera({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 + (size.width <= 640 ? 150 / scale : 30), scale });
+    glideTo({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 + (size.width <= 640 ? 150 / scale : 30), scale });
   }
 
   function zoom(factor: number) {
-    setCamera(current => ({ ...current, scale: Math.min(4, Math.max(.12, current.scale * factor)) }));
+    const current = cameraRef.current;
+    glideTo({ ...current, scale: Math.min(4, Math.max(.12, current.scale * factor)) }, 320);
   }
 
   const markers = useMemo(() => {
@@ -149,6 +182,7 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
     <div className="map-surface"
       onPointerDown={event => {
         if (event.button !== 0) return;
+        stopGlide();
         drag.current = { x: event.clientX, y: event.clientY, camera };
         event.currentTarget.setPointerCapture(event.pointerId);
         setDragging(true);

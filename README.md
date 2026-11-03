@@ -1,7 +1,7 @@
 # Canadian Housing Agent
 
 A free public demo where visitors chat with a tool-calling LLM agent about a
-research sample of 50,014 Canadian for-sale listings across 123 cities in 11 provinces. The agent
+research sample of 54,658 Canadian for-sale listings across 123 cities in 11 provinces. The agent
 answers questions like "median asking price for a 3-bed in Hamilton?" or "how
 many listings are in M6P?" by calling deterministic search and stats functions
 over a JSON dataset. Numbers come from those functions; the model picks tools
@@ -11,12 +11,11 @@ minimum-bath filters. The agent can also rank a city's postal areas by median
 asking price or listing count, and it can surface listings asking below an
 offline comparable-listings estimate (`find_deals`): the estimated typical
 asking price from comparable asking prices, not an appraisal, sold price, or
-investment advice. Search answers render up to six listing cards (each with its
+investment advice. It can also work out an illustrative Canadian mortgage (down-payment minimum, CMHC premium, monthly payment, and the stress test) with `mortgage_estimate`, or the highest price a household income supports. Search answers render up to six listing cards (each with its
 address and a link to the source listing) and a sample-size line. Tool-using
 answers include a collapsed "How this answer was computed" block with the raw
-tool calls. The atlas has a Data tab with a CSV export and a biggest-discount
-sort, and its state (city, compare pair, sort, price ceiling, tab, view) is
-mirrored into the URL so a view can be shared. The agent has six tools;
+tool calls. The atlas has a Data tab: a national listings explorer with city, province, beds, price range, free-text search, four sorts, and paging, plus a CSV export. A city's detail tray has an affordability calculator with the same arithmetic as the agent tool. Its state (city, compare pair, sort, price ceiling, tab, view) is
+mirrored into the URL so a view can be shared. The agent has seven tools;
 `search_docs` answers questions about the project itself from its own
 documentation (see [Docs search](#docs-search-search_docs)).
 
@@ -63,9 +62,9 @@ plumbing only. Each run writes `evals/report.json`, which is gitignored, and
 the harness updates it after every case so an aborted run keeps partial
 results. Reports include the answers and tool arguments for diagnosis. Live
 bars: tool choice >= 0.90, numeric >= 0.95, refusals 1.00. `quality_gate_passed`
-stays false for mock runs and partial runs (`--limit` or `--category` selecting
+stays false for mock runs and partial runs (`--limit`, `--category` or `--ids` selecting
 fewer than all cases), even if their selected cases pass. The last completed
-full live pass is the 32-case gate from 2026-09-16; the 48-case suite has not
+full live pass is the 32-case gate from 2026-09-16; the 53-case suite has not
 completed a live run (2026-09-17 attempts hit the Groq free-tier daily token
 cap).
 
@@ -98,12 +97,13 @@ pipeline/build_dataset.py   dedupe by listing id -> filter -> extract FSA -> hmb
                             valuation -> write twelve fields (incl. estValue/discountPct)
         |
         v
-data/listings.json          50,014 listings incl. province, address, source URL,
+data/listings.json          54,658 listings incl. province, address, source URL,
                             estValue + discountPct
 data/market_summary.json    per-city aggregates
         |
         v
-lib/tools.ts                deterministic search/stats (incl. rank_areas, find_deals, search_docs) + OpenAI-style tool schemas
+lib/tools.ts                deterministic search/stats (incl. rank_areas, find_deals, mortgage_estimate, search_docs) + OpenAI-style tool schemas
+lib/mortgage.ts              pure Canadian mortgage arithmetic (CMHC, stress test, GDS income estimate)
 lib/embed.ts + lib/rag.ts   pure hash-v1 encoder + docs-index cosine retrieval (keyless, in-memory)
         |
         v
@@ -120,7 +120,7 @@ Gemini gemini-2.5-flash-lite     optional fallback when GEMINI_API_KEY is set an
 
 `mcp/server.ts` exposes the project's tool definitions over MCP stdio, reusing
 `TOOL_SPECS` from `lib/tools.ts` verbatim (schemas passed through unchanged;
-currently all six tools, including `search_docs`). Every tool is a
+currently all seven tools, including `search_docs` and `mortgage_estimate`). Every tool is a
 deterministic, read-only lookup with no model call. Point a client at an
 absolute path so the server runs from any working directory:
 
@@ -142,7 +142,7 @@ JSON only, and diagnostics go to stderr.
 
 ## Docs search (`search_docs`)
 
-The sixth agent tool answers questions about the project, its data pipeline,
+The `search_docs` tool answers questions about the project, its data pipeline,
 and the hmb-v1 estimate from the project's own documentation (README.md plus
 docs/DATA.md, docs/DEMO.md, docs/PLAN.md). Retrieval is deterministic and
 keyless: `lib/embed.ts` is a pure hash encoder (256 dimensions, FNV-1a over
@@ -213,8 +213,8 @@ canadian-housing-agent/
   It includes each listing's address and a link to the source listing; listing
   ids, agent names, and scraped source pages are not published. Not affiliated
   with Zillow.
-- Asking prices only; no sold prices. Square footage covers 56.7% of rows and is
-  city-skewed (near complete in Calgary, Surrey, and Vancouver; about 1% in
+- Asking prices only; no sold prices. Square footage covers 57.5% of rows and is
+  city-skewed (near complete in Calgary, Surrey, and Vancouver; about 1.5% in
   Toronto and nearly none in Ottawa); values outside a plausible 200-20,000 sqft
   range (for example, land listings whose acreage the source renders as interior
   square feet) are treated as missing. The sample is a single snapshot and can be

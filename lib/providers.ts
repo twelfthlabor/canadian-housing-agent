@@ -120,6 +120,17 @@ export function matchedCities(question: string): string[] {
     .map((entry) => entry.city);
 }
 
+/** "$850k", "1.2m", or "850,000" in a question, as a CAD price; null when none is present. */
+export function parsePriceText(question: string): number | null {
+  const match = question.toLowerCase().match(/\$?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*(k|m|million)?\b/);
+  if (!match) return null;
+  const base = Number(match[1].replace(/,/g, ""));
+  if (!Number.isFinite(base)) return null;
+  const scale = match[2] === "k" ? 1_000 : match[2] ? 1_000_000 : 1;
+  const value = base * scale;
+  return value >= 10_000 ? value : null;
+}
+
 /** Deterministic tool choice for a user question, per the demo rules. */
 export function mockToolCallFor(
   question: string,
@@ -164,6 +175,25 @@ export function mockToolCallFor(
       args: {
         city: cities[0],
         ...(explicit ? { minDiscount: Number(explicit[1]) } : {}),
+      },
+    };
+  }
+
+  // Payment and affordability questions go to the mortgage tool with the price
+  // and percentages the user wrote; without a price the mock asks for one.
+  if (/\b(mortgage|monthly payment|down payment|stress test|cmhc)\b/.test(q)) {
+    const price = parsePriceText(q);
+    if (price === null) return null;
+    const down = q.match(/(\d{1,2}(?:\.\d+)?)\s*%\s*down/);
+    const rate = q.match(/(\d{1,2}(?:\.\d+)?)\s*%\s*(?:rate|interest)/);
+    return {
+      id: "mock_mortgage",
+      name: "mortgage_estimate",
+      args: {
+        price,
+        downPct: down ? Number(down[1]) : 20,
+        ratePct: rate ? Number(rate[1]) : 4.5,
+        amortYears: 25,
       },
     };
   }
@@ -253,6 +283,13 @@ export function mockAnswerFromToolResult(message: ChatMessage): string {
     )} at least ${result.minDiscount}% below the comparable-listings estimate. The largest discount is ${
       top.discountPct
     }% below estimate: a ${top.beds ?? "?"}-bed at ${formatMoney(top.price)}${where}${source}.`;
+  }
+
+  if (message.name === "mortgage_estimate") {
+    const result = data as { error?: string; monthlyPayment?: number; loan?: number; insuredLoan?: number; cmhcPremium?: number; stressRatePct?: number; stressMonthlyPayment?: number; incomeNeeded?: number } | null;
+    if (!result || typeof result.error === "string") return `I could not run that estimate: ${result?.error ?? "missing inputs"}.`;
+    const premium = result.cmhcPremium && result.cmhcPremium > 0 ? ` (the ${formatMoney(result.loan)} loan plus a ${formatMoney(result.cmhcPremium)} CMHC premium)` : "";
+    return `On a ${formatMoney(result.insuredLoan)} mortgage${premium}, the illustrative monthly payment is ${formatMoney(result.monthlyPayment)}. At the ${result.stressRatePct}% stress-test rate it would be ${formatMoney(result.stressMonthlyPayment)}, which needs about ${formatMoney(result.incomeNeeded)} of annual household income under the 39% limit. This is an illustration, not a mortgage offer.`;
   }
 
   if (message.name === "compare_cities") {

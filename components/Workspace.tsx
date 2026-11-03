@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 import type { CitySummary, MarketSummary } from "@/lib/types";
 import Chat from "./Chat";
+import CountUp from "./CountUp";
 import DataTable from "./DataTable";
 import Icon from "./Icon";
 import MapCanvas from "./MapCanvas";
+import MortgageCalculator from "./MortgageCalculator";
 import { cityName, compactMoney, money } from "./format";
 
 const featured = ["toronto", "ottawa", "hamilton", "kitchener", "london", "mississauga", "barrie", "windsor"];
@@ -56,7 +58,7 @@ export default function Workspace({ summary, offline }: Props) {
   const [ceiling, setCeiling] = useState(() => paramCeiling(searchParams));
   const [sort, setSort] = useState<Sort>(() => paramSort(searchParams));
   const [pair, setPair] = useState<[string, string]>(() => paramPair(searchParams, cities));
-  const [detailView, setDetailView] = useState<"overview" | "beds">("overview");
+  const [detailView, setDetailView] = useState<"overview" | "beds" | "afford">("overview");
   const [draft, setDraft] = useState<{ text: string; id: number } | null>(null);
   const agentDialog = useRef<HTMLDialogElement>(null);
   const aboutDialog = useRef<HTMLDialogElement>(null);
@@ -149,7 +151,7 @@ export default function Workspace({ summary, offline }: Props) {
         <details className="filter-disclosure"><summary><Icon name="filter" />Median price ceiling<span>{ceiling === 2_000_000 ? "Any price" : compactMoney(ceiling)}<Icon name="chevron" /></span></summary><div className="filter-content"><label htmlFor="ceiling">Show cities with a median up to <strong>{ceiling === 2_000_000 ? "any price" : money(ceiling)}</strong></label><input id="ceiling" type="range" min="300000" max="2000000" step="50000" value={ceiling} onChange={event => setCeiling(Number(event.target.value))} /><div><span>$300k</span><span>Any price</span></div><p>Filters city medians, not individual listings.</p></div></details>
         <div className="index-toolbar"><span aria-live="polite">{visible.length} {visible.length === 1 ? "city" : "cities"}</span><label className="sr-only" htmlFor="sort">Sort cities</label><select id="sort" value={sort} onChange={event => setSort(event.target.value as Sort)}><option value="featured">Featured first</option><option value="name">City A–Z</option><option value="low">Lowest median</option><option value="high">Highest median</option></select></div>
         <div className="city-list">
-          {visible.length === 0 ? <div className="no-cities"><h3>No cities match.</h3><p>Try another name or a higher median price.</p><button onClick={() => { setQuery(""); setCeiling(2_000_000); }}>Clear filters</button></div> : visible.map(city => <div key={city} className={`city-row${selected === city ? " selected" : ""}`}>
+          {visible.length === 0 ? <div className="no-cities"><h3>No cities match.</h3><p>Try another name or a higher median price.</p><button onClick={() => { setQuery(""); setCeiling(2_000_000); }}>Clear filters</button></div> : visible.map((city, index) => <div key={city} className={`city-row row-enter${selected === city ? " selected" : ""}`} style={{ "--i": Math.min(index, 14) } as CSSProperties}>
             <button className="city-row-main" aria-pressed={selected === city} onClick={() => selectCity(city)}><span className="row-dot" /><span className="row-city"><strong>{cityName(city)}</strong><span>{summary.cities[city].count.toLocaleString("en-CA")} sampled listings</span></span><span className="row-price">{compactMoney(summary.cities[city].medianPrice)}<small>median</small></span></button>
             <button className="row-compare" onClick={() => compareCity(city)} aria-label={`Compare ${cityName(city)}`} title={`Compare ${cityName(city)}`}><Icon name="compare" /></button>
           </div>)}
@@ -160,9 +162,9 @@ export default function Workspace({ summary, offline }: Props) {
       <section className="atlas-main" aria-label={view === "explore" ? "Canada housing map" : view === "compare" ? "City comparison" : "Source data"}>
         {view === "explore" ? <MapCanvas cities={summary.cities} visible={visible} selected={selected} compared={pair} onSelect={selectCity}>
           {visible.includes(selected) ? <section className="city-tray" aria-label={`${cityName(selected)} city details`}>
-            <div className="tray-heading"><span className="micro-label"><span className="selection-dot" />SELECTED CITY</span><span className="tray-tabs" role="group" aria-label="City details view"><button aria-pressed={detailView === "overview"} onClick={() => setDetailView("overview")} aria-label="City overview"><Icon name="list" /></button><button aria-pressed={detailView === "beds"} onClick={() => setDetailView("beds")} aria-label="Bedroom prices"><Icon name="chart" /></button></span></div>
+            <div className="tray-heading"><span className="micro-label"><span className="selection-dot" />SELECTED CITY</span><span className="tray-tabs" role="group" aria-label="City details view"><button aria-pressed={detailView === "overview"} onClick={() => setDetailView("overview")} aria-label="City overview"><Icon name="list" /></button><button aria-pressed={detailView === "beds"} onClick={() => setDetailView("beds")} aria-label="Bedroom prices"><Icon name="chart" /></button><button aria-pressed={detailView === "afford"} onClick={() => setDetailView("afford")} aria-label="Affordability calculator"><Icon name="calculator" /></button></span></div>
             <h2>{cityName(selected)}</h2>
-            {detailView === "overview" ? <div className="tray-content" key={`${selected}-overview`}><p className="tray-price">{money(snap.medianPrice)}<span>median asking price</span></p><div className="tray-stats"><span><strong>{snap.count.toLocaleString("en-CA")}</strong>sampled listings</span><span><strong>{Math.round(snap.shareUnder1M * 100)}%</strong>asking under $1m</span></div></div> : <div className="tray-content tray-bedrooms" key={`${selected}-beds`}><p>Median asking price by bedroom count</p>{Object.entries(snap.medianByBeds).map(([bed, price]) => <div key={bed}><span>{bed} bed</span><span className="mini-track"><i style={{ width: `${price === null ? 0 : price / Math.max(...Object.values(snap.medianByBeds).map(value => value ?? 0)) * 100}%` }} /></span><strong>{price === null ? "No data" : compactMoney(price)}</strong></div>)}</div>}
+            {detailView === "overview" ? <div className="tray-content" key={`${selected}-overview`}><p className="tray-price"><CountUp value={snap.medianPrice} format={money} /><span>median asking price</span></p><div className="tray-stats"><span><strong><CountUp value={snap.count} /></strong>sampled listings</span><span><strong><CountUp value={Math.round(snap.shareUnder1M * 100)} />%</strong>asking under $1m</span></div></div> : detailView === "afford" ? <div className="tray-content tray-afford" key={`${selected}-afford`}><MortgageCalculator citySlug={selected} cityLabel={cityName(selected)} defaultPrice={snap.medianPrice} /></div> : <div className="tray-content tray-bedrooms" key={`${selected}-beds`}><p>Median asking price by bedroom count</p>{Object.entries(snap.medianByBeds).map(([bed, price]) => <div key={bed}><span>{bed} bed</span><span className="mini-track"><i style={{ width: `${price === null ? 0 : price / Math.max(...Object.values(snap.medianByBeds).map(value => value ?? 0)) * 100}%` }} /></span><strong>{price === null ? "No data" : compactMoney(price)}</strong></div>)}</div>}
             <div className="tray-actions"><button onClick={() => compareCity(selected)}><Icon name="compare" />Compare</button><button onClick={() => ask(`Give me a market snapshot of ${cityName(selected)}`)}>Ask about this city<Icon name="arrow" /></button></div>
           </section> : <div className="map-filter-message"><strong>{visible.length ? "Choose a city to explore." : "No cities match your filters."}</strong><span>Select a visible map marker or clear your search.</span><button onClick={() => { setQuery(""); setCeiling(2_000_000); }}>Clear filters</button></div>}
         </MapCanvas> : view === "compare" ? <Comparison cities={summary.cities} pair={pair} setPair={setPair} onAsk={() => ask(`Compare ${cityName(pair[0])} and ${cityName(pair[1])}`)} /> : <DataTable cities={cities} city={selected} onCityChange={setSelected} totalRows={summary.totals.rows} valuation={valuation} />}

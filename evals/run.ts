@@ -33,12 +33,13 @@ import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { runAgent } from "../lib/agent";
+import { GENERIC_ERROR_MESSAGES, runAgent } from "../lib/agent";
 import type { AgentInputMessage } from "../lib/agent";
 import { createMockProvider, getProvider } from "../lib/providers";
 import type { Provider } from "../lib/providers";
 import { TOOL_IMPLS, citySnapshot, findDeals, searchListings } from "../lib/tools";
 import type { CitySnapshot } from "../lib/types";
+import { computeMortgage, maxPriceForIncome } from "../lib/mortgage";
 
 /* -------------------------------------------------------------------------
  * Types
@@ -57,7 +58,9 @@ type NumericSource =
   | { kind: "cheapest_price"; city: string; beds?: number }
   | { kind: "priciest_price"; city: string }
   | { kind: "deal_count"; city: string; minDiscount: number }
-  | { kind: "deal_top_discount"; city: string };
+  | { kind: "deal_top_discount"; city: string }
+  | { kind: "mortgage_payment"; price: number; downPct: number; ratePct: number }
+  | { kind: "mortgage_budget"; householdIncome: number; downPct: number; ratePct: number };
 
 type Check =
   | { type: "numeric"; source: NumericSource; unit?: Unit }
@@ -133,7 +136,7 @@ const CASES_PATH = path.join(here, "cases.jsonl");
  * CLI
  * ---------------------------------------------------------------------- */
 
-type Flags = { limit?: number; category?: Category; mock: boolean; help: boolean };
+type Flags = { limit?: number; category?: Category; ids?: string[]; mock: boolean; help: boolean };
 
 function parseFlags(argv: string[]): Flags {
   const flags: Flags = { mock: false, help: false };
@@ -145,6 +148,13 @@ function parseFlags(argv: string[]): Flags {
     }
     if (arg === "--mock") {
       flags.mock = true;
+      continue;
+    }
+    if (arg === "--ids" || arg.startsWith("--ids=")) {
+      const raw = arg === "--ids" ? argv[++i] : arg.slice("--ids=".length);
+      const ids = (raw ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+      if (ids.length === 0) throw new Error(`--ids expects comma-separated case ids, got "${raw ?? ""}"`);
+      flags.ids = ids;
       continue;
     }
     if (arg === "--limit") {
@@ -188,6 +198,7 @@ function usage(): void {
   npm run evals                                live, needs GROQ_API_KEY
   npm run evals -- --category numeric          run one category
   npm run evals -- --limit 5                   run the first N cases
+  npm run evals -- --ids T01,D01               run only the named case ids
   npm run evals -- --mock                      force the mock provider
 
 Env:
@@ -346,6 +357,15 @@ function resolveExpected(source: NumericSource): Resolved {
         throw new Error(`${source.kind}: no deals in ${source.city}`);
       }
       return { value: top.discountPct, unit: "percent", label: `${source.city} top discountPct` };
+    }
+    case "mortgage_payment": {
+      const result = computeMortgage({ price: source.price, downPct: source.downPct, ratePct: source.ratePct, amortYears: 25 });
+      return { value: result.monthlyPayment, unit: "cad", label: `monthly payment on ${source.price}` };
+    }
+    case "mortgage_budget": {
+      const max = maxPriceForIncome({ householdIncome: source.householdIncome, downPct: source.downPct, ratePct: source.ratePct, amortYears: 25 });
+      if (max === null) throw new Error(`${source.kind}: no affordable price for ${source.householdIncome}`);
+      return { value: max, unit: "cad", label: `max affordable price at ${source.householdIncome} income` };
     }
   }
 }
@@ -837,6 +857,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Retry budget for a case whose answer service was rate limited or unavailable. */
+const RATE_LIMIT_RETRIES = 2;
+const RATE_LIMIT_WAIT_MS = 45_000;
+
+/** True when a turn produced no answer because the provider failed, not because the model did. */
+function isRateLimited(outcome: RunOutcome): boolean {
+  const turns = outcome.turns ?? [outcome];
+  return turns.some((turn) => !turn.answer && turn.error === GENERIC_ERROR_MESSAGES.provider_error);
+}
+
 function envDelayMs(): number {
   const raw = process.env.EVAL_DELAY_MS;
   if (raw === undefined || raw.trim() === "") return 2500;
@@ -858,6 +888,15 @@ async function main(): Promise<number> {
   const allCases = loadCases();
   let selected = allCases;
   if (flags.category) selected = selected.filter((c) => c.category === flags.category);
+  if (flags.ids) {
+    const wanted = new Set(flags.ids);
+    const unknown = [...wanted].filter((id) => !allCases.some((c) => c.id === id));
+    if (unknown.length > 0) {
+      console.error(`unknown case ids: ${unknown.join(", ")}`);
+      return 1;
+    }
+    selected = selected.filter((c) => wanted.has(c.id));
+  }
   if (flags.limit !== undefined) selected = selected.slice(0, flags.limit);
   if (selected.length === 0) {
     console.error("no cases selected");
@@ -900,7 +939,14 @@ async function main(): Promise<number> {
 
   const reportCases: CaseReport[] = [];
   for (const [index, evalCase] of selected.entries()) {
-    const outcome = await runAgentCase(evalCase, provider);
+    let outcome = await runAgentCase(evalCase, provider);
+    // Free-tier rate limits surface as an empty answer with an error. Wait and retry
+    // rather than scoring the case as a model failure.
+    for (let attempt = 1; !isMock && isRateLimited(outcome) && attempt <= RATE_LIMIT_RETRIES; attempt += 1) {
+      console.log(`  ${evalCase.id} hit a provider error; waiting ${RATE_LIMIT_WAIT_MS / 1000}s (retry ${attempt}/${RATE_LIMIT_RETRIES})`);
+      await sleep(RATE_LIMIT_WAIT_MS);
+      outcome = await runAgentCase(evalCase, provider);
+    }
     const row = buildCaseReport(evalCase, outcome);
     reportCases.push(row);
     // Persist after every case so an aborted run (quota, crash) keeps partial results.

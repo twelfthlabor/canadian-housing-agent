@@ -9,7 +9,7 @@ Raw listings come from the separate `property-scraper` project, treated as
 read-only here: per-region CSVs of current listings at
 `../property-scraper/data/regions/<city>-<prov>/listings.csv`.
 
-The published snapshot covers 123 cities in 11 provinces with 50,014 rows
+The published snapshot covers 123 cities in 11 provinces with 54,658 rows
 after cleaning. A rebuild reads the newest scrape tree, so its row count
 follows the scrape data and can differ from the tracked snapshot (see
 [Refresh](#refresh)).
@@ -42,7 +42,7 @@ It writes:
 - Current for-sale asking listings.
 - 123 cities in 11 provinces (every region with scraped rows; 36 zero-row
   northern regions emit nothing).
-- 50,014 rows in the published snapshot after dedupe and filtering (a rebuild
+- 54,658 rows in the published snapshot after dedupe and filtering (a rebuild
   from a newer scrape tree can carry more). 198 of them (in the 19 cities with
   fewer than 30 rows) carry null `estValue`/`discountPct`.
 
@@ -101,7 +101,7 @@ City lookups accept natural spellings (e.g. "St. Catharines", "Sault Ste. Marie"
 
 ## CSV export
 
-`GET /api/listings?format=csv` returns all 50,014 rows with the header
+`GET /api/listings?format=csv` returns all 54,658 rows with the header
 `city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct`.
 A `null` field (for example `fsa`, or an estimate in a small city) becomes an
 empty cell. Values are quoted per
@@ -113,14 +113,14 @@ process and served with a one-hour browser / one-day CDN cache.
 ## Square footage
 
 `sqft` is missing for about half the rows and coverage varies by city. The
-plausibility rule above nulled 131 values in the tracked snapshot. 56.7% of
-kept rows carry `sqft` (28,356 of 50,014); non-null values range from 204 to
+plausibility rule above nulled 131 values in the tracked snapshot. 57.5% of
+kept rows carry `sqft` (31,428 of 54,658); non-null values range from 204 to
 19,898. Coverage is city-skewed: near complete in Calgary, Surrey, and
-Vancouver; about 1% in Toronto; near zero in Ottawa. Because missingness is
+Vancouver; about 1.5% in Toronto; near zero in Ottawa. Because missingness is
 not random, per-square-foot comparisons across cities are unreliable.
 
 `data/market_summary.json` reports a per-city `medianSqft` over plausible values
-only, and `null` when a city has fewer than 10 sqft samples. 27 of 123 cities
+only, and `null` when a city has fewer than 10 sqft samples. 26 of 123 cities
 fall below that bar.
 
 ## Valuation (hmb-v1)
@@ -139,7 +139,7 @@ signal remains and the reported OOF MdAPE is a lower bound on the error for a
 genuinely new property. In-sample fits are never published; one median bias
 correction is applied.
 
-- Coverage is 99.6% (49,816 of 50,014 rows, 104 cities). The 198 rows in cities
+- Coverage is 99.6% (54,450 of 54,658 rows, 104 cities). The 208 rows in 19 cities
   with fewer than 30 rows carry `null`.
 - Out-of-fold accuracy on the tracked snapshot: MdAPE 19%, bias 0.0%. The
   per-city MdAPE for all 104 estimated cities is published as
@@ -188,9 +188,9 @@ a human clears it in the attach Chrome and the next run resumes the queue.
 
 - **Asking prices only.** No sold prices, so the data says nothing about
   transaction values or market direction.
-- **Sparse, skewed square footage.** `sqft` is present for 56.7% of rows
-  (28,356 of 50,014) but is not missing at random: coverage is near complete in
-  Calgary, Surrey, and Vancouver, about 1% in Toronto, and near zero in Ottawa;
+- **Sparse, skewed square footage.** `sqft` is present for 57.5% of rows
+  (31,428 of 54,658) but is not missing at random: coverage is near complete in
+  Calgary, Surrey, and Vancouver, about 1.5% in Toronto, and near zero in Ottawa;
   27 of 123 city `medianSqft` values are suppressed below 10 samples, and
   implausible values (lot acreage, commercial floor area) are excluded. Within a
   comparable-listings cell in Toronto, Ottawa, Mississauga, or London, ranking
@@ -202,7 +202,7 @@ a human clears it in the attach Chrome and the next run resumes the queue.
   deal threshold is the model's noise margin, not evidence that a listing is
   mispriced.
 - **Valuation coarseness.** Estimates are group medians; rows in cities with
-  fewer than 30 listings get none (198 rows in 19 cities today), and small
+  fewer than 30 listings get none (208 rows in 19 cities today), and small
   cities are valued from few comparables, so their estimates are coarse.
 - **Single snapshot.** The current build keeps no history, so price changes and
   price cuts cannot be computed. Adding that would require snapshot archiving in

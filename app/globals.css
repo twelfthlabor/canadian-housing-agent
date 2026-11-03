@@ -394,8 +394,8 @@ dialog[open] { animation: dialog-enter 220ms var(--ease); }
   .city-tray h2 { font-size: 28px; margin-top: 7px; }
   .tray-content { min-height: 105px; }
   .tray-price { margin: 12px 0; font-size: 23px; }
-  .tray-stats { position: absolute; right: 20px; top: 80px; gap: 12px; flex-direction: column; padding: 0; }
-  .tray-stats > span + span { border: none; padding: 0; }
+  .tray-stats { gap: 16px; padding: 0 0 12px; }
+  .tray-stats > span + span { padding-left: 16px; }
   .tray-stats strong { font-size: 12px; margin-bottom: 3px; }
   .tray-stats > span { font-size: 8px; }
   .tray-price > span { font-size: 9px; }
@@ -444,3 +444,90 @@ dialog[open] { animation: dialog-enter 220ms var(--ease); }
 }
 @media (max-height: 720px) and (max-width: 760px) { .map-heading h1 { font-size: 29px; } .map-heading { top: 18px; } .map-heading .micro-label { display: none; } .city-tray { bottom: 81px; } .tray-stats { top: 70px; } .tray-content { min-height: 85px; } .tray-price { font-size: 21px; } .map-controls { bottom: 312px; } .map-region-control { bottom: 316px; } .map-attribution { bottom: 62px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* ---- Polish pass: motion, listings explorer, affordability calculator ---- */
+@keyframes row-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes orb-pulse { 0%, 100% { box-shadow: 0 0 0 0 #ed835e55; } 60% { box-shadow: 0 0 0 7px #ed835e00; } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.count-up { font-variant-numeric: tabular-nums; }
+.row-enter { animation: row-rise 420ms var(--ease) both; animation-delay: calc(var(--i, 0) * 28ms); }
+.agent-orb { animation: orb-pulse 2.8s ease-out infinite; }
+.comparison-bar-track > span { transform-origin: left center; animation: grow-x 900ms var(--ease) both; }
+.tray-content { animation: fade-up 320ms var(--ease) both; }
+
+.skeleton-bar { display: block; height: 10px; border-radius: 4px; background: linear-gradient(90deg, #eceee5 25%, #f7f8f3 50%, #eceee5 75%); background-size: 240% 100%; animation: shimmer 1.4s linear infinite; }
+.skeleton-row td { padding-block: 12px; }
+
+.data-download { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #d3d9c9; background: #fff; border-radius: 8px; padding: 9px 13px; font-size: 11px; color: var(--ink); white-space: nowrap; transition: background 160ms, border-color 160ms, transform 160ms; }
+.data-download:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+.data-download svg { width: 15px; height: 15px; }
+
+.data-filters { display: grid; grid-template-columns: minmax(180px, 1.6fr) repeat(3, minmax(120px, 1fr)) repeat(2, minmax(110px, .8fr)) minmax(150px, 1fr); gap: 10px 12px; margin-top: 22px; align-items: end; }
+.filter-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.filter-field > span { font: 9px var(--mono); letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+.filter-field input, .filter-field select { width: 100%; border: 1px solid #d8ded0; background: #fff; border-radius: 7px; padding: 9px 11px; font-size: 12px; transition: border-color 160ms, box-shadow 160ms; }
+.filter-field input:focus, .filter-field select:focus { border-color: #b9c4ae; box-shadow: 0 0 0 3px #ed835e22; outline: none; }
+.filter-field input::placeholder { color: #9ca395; }
+.filter-price .mortgage-money input { border: 0; padding: 0; box-shadow: none; }
+.data-meta strong { color: var(--ink); font-weight: 500; }
+.data-retry { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--accent-ink); padding: 4px 8px; border-radius: 6px; }
+.data-retry:hover { background: #f3ece4; }
+.data-retry svg { width: 13px; height: 13px; }
+.data-scroll { transition: opacity 200ms; }
+.data-scroll.is-refreshing { opacity: .55; }
+.data-empty-state { display: flex; gap: 14px; align-items: flex-start; background: #fff; border: 1px dashed #cfd6c4; border-radius: 10px; padding: 18px 20px; margin-bottom: 12px; animation: fade-up 300ms var(--ease) both; }
+.data-empty-state > svg { width: 20px; height: 20px; color: #8a9383; margin-top: 2px; }
+.data-empty-state strong { font-weight: 500; font-size: 13px; }
+.data-empty-state p { margin-top: 4px; font-size: 11px; line-height: 1.6; color: #66725c; }
+.data-empty-state button { margin-top: 10px; font-size: 11px; padding: 6px 11px; border-radius: 6px; background: var(--ink); color: #fff; }
+.data-more { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 12px; font-size: 10px; color: #89917f; }
+.data-more button { background: #fff; border: 1px solid #d3d9c9; border-radius: 8px; padding: 9px 16px; font-size: 12px; color: var(--ink); }
+.data-more button:hover:not(:disabled) { border-color: var(--ink); }
+.data-table .deal-badge { white-space: nowrap; }
+
+.tray-afford { max-height: min(56vh, 480px); overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
+.mortgage { display: flex; flex-direction: column; gap: 14px; }
+.mortgage-inputs { display: grid; gap: 12px; }
+.mortgage-field { display: grid; gap: 6px; }
+.mortgage-field > span:first-child { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+.mortgage-field > span strong { color: var(--ink); font-weight: 500; font-family: var(--mono); font-size: 11px; }
+.mortgage-field small { font-size: 9.5px; color: #8e9686; line-height: 1.5; }
+.mortgage-field input[type="range"] { width: 100%; accent-color: var(--green); cursor: pointer; }
+.mortgage-money { display: flex; align-items: center; gap: 6px; border: 1px solid #d8ded0; background: #fff; border-radius: 7px; padding: 8px 10px; font-family: var(--mono); font-size: 12px; }
+.mortgage-money input { border: 0; background: transparent; width: 100%; font: inherit; outline: none; }
+.segmented { display: flex; background: #eeefe9; border-radius: 8px; padding: 3px; gap: 3px; }
+.segmented button { flex: 1; padding: 6px 4px; border-radius: 6px; font-size: 11px; color: #7b8275; transition: background 200ms, color 200ms, box-shadow 200ms; }
+.segmented button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px #1e2d1b1a; }
+.mortgage-result { display: grid; gap: 12px; border-top: 1px solid #e3e6dc; padding-top: 14px; }
+.mortgage-payment { font: 28px var(--mono); letter-spacing: -1.2px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.mortgage-payment-unit { font: 11px "Instrument Sans", sans-serif; letter-spacing: 0; color: #8e9686; margin-left: 6px; }
+.mortgage-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 0; }
+.mortgage-facts div { display: grid; gap: 2px; }
+.mortgage-facts dt { font-size: 9.5px; color: #8e9686; }
+.mortgage-facts dd { margin: 0; font: 12px var(--mono); }
+.stress-card { display: flex; gap: 10px; background: #f3f5ee; border-radius: 9px; padding: 11px 12px; }
+.stress-card > svg { width: 18px; height: 18px; color: var(--green); margin-top: 1px; }
+.stress-card strong { font-weight: 500; font-size: 11.5px; }
+.stress-card p { margin-top: 4px; font-size: 10.5px; line-height: 1.6; color: #5f6a58; }
+.mortgage-error { font-size: 11px; color: var(--accent-ink); background: #fbeee8; border-radius: 8px; padding: 10px 12px; line-height: 1.5; }
+.mortgage-field > span small { font-size: 9px; color: #8e9686; font-weight: 400; margin-left: 4px; }
+.budget-card { display: grid; gap: 6px; background: #fff; border: 1px solid #dfe5d6; border-radius: 9px; padding: 12px 13px; }
+.budget-card p { margin: 0; }
+.budget-card .micro-label { margin-bottom: 2px; }
+.budget-price { font: 20px var(--mono); letter-spacing: -.8px; font-variant-numeric: tabular-nums; }
+.budget-listings { font-size: 10.5px; line-height: 1.6; color: #5f6a58; }
+.budget-listings strong { font-weight: 500; color: var(--ink); }
+.mortgage-fineprint { font-size: 9px; line-height: 1.6; color: #8e9686; }
+
+.city-row { animation: row-rise 380ms var(--ease) both; animation-delay: calc(var(--i, 0) * 22ms); }
+.city-row .row-dot { transition: transform 260ms var(--ease), background 200ms; }
+.city-row.selected .row-dot { transform: scale(1.35); }
+.city-row-main, .row-compare { transition: background 160ms, transform 160ms; }
+.nav-count { transition: transform 240ms var(--ease); }
+.workspace-nav button[aria-pressed="true"] .nav-count { transform: scale(1.12); }
+
+@media (max-width: 1280px) { .data-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .filter-search { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .data-scroll { flex: none; height: 58vh; } .data-filters { grid-template-columns: 1fr 1fr; } .filter-search, .filter-field:nth-child(2) { grid-column: 1 / -1; } .data-download { width: 100%; justify-content: center; } .data-more { flex-direction: column; } .mortgage-facts { grid-template-columns: 1fr; } }

@@ -1,4 +1,5 @@
 import { listings, summary } from "./dataset";
+import { MIN_PRICE, MortgageError, computeMortgage, maxPriceForIncome } from "./mortgage";
 import { retrieveDocs } from "./rag";
 import type {
   AreaRank,
@@ -440,6 +441,7 @@ export const TOOL_SPECS = [
       description:
         `Get the market snapshot for one Canadian city, optionally scoped to a forward sortation area and filtered by price, bedroom count, and minimum bathrooms: listing count, median price, first/third quartile prices, ` +
         `median price by bedroom count, share of listings under $1M, and median square footage. ` +
+        `shareUnder1M is the share of the listings that match the filters, so answer a share-under-$1M question with no price filter (maxPrice omitted). ` +
         `Returns null for an unknown city, an unknown forward sortation area, or filters that match no listings. Use this for counts and market statistics; use search_listings for budget or filtered-listing questions. ${NEVER_INVENT}`,
       parameters: {
         type: "object",
@@ -639,6 +641,48 @@ export const TOOL_SPECS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "mortgage_estimate",
+      description:
+        "Illustrative Canadian mortgage math. With a price: minimum down payment under the federal rules, the CMHC insurance premium when down payment is under 20%, the monthly payment at the contract rate (semi-annual compounding), total interest over the amortization, the OSFI stress-test rate (the greater of contract rate plus 2% and 5.25%) with its payment, and the annual income needed to keep housing costs within the 39% GDS limit (property tax assumed at 1% of price and heat at $150 per month). With a householdIncome: the highest affordable price on those terms. " +
+        "Use it for affordability, payment, down-payment, or stress-test questions. It is not a mortgage offer and does not use live rates: the user supplies the price or income, and the rate must be one the user gave or accepts; never invent numbers. Returns an error message for out-of-range inputs or a down payment below the minimum.",
+      parameters: {
+        type: "object",
+        properties: {
+          price: {
+            type: "number",
+            description: "Purchase price in CAD.",
+          },
+          downPct: {
+            type: "number",
+            minimum: 0,
+            maximum: 100,
+            description: "Down payment as a percent of price (for example 20).",
+          },
+          ratePct: {
+            type: "number",
+            minimum: 0,
+            maximum: 15,
+            description: "Contract annual interest rate in percent (for example 4.5).",
+          },
+          amortYears: {
+            type: "integer",
+            minimum: 5,
+            maximum: 30,
+            description: "Amortization in years. Defaults to 25.",
+          },
+          householdIncome: {
+            type: "number",
+            description: "Annual gross household income in CAD. When given, the result includes maxAffordablePrice: the highest price that keeps stressed housing costs within 39% of this income (null when none fits).",
+          },
+        },
+        required: ["downPct", "ratePct"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 function asString(value: unknown): string {
@@ -702,6 +746,29 @@ export const TOOL_IMPLS: Record<string, (args: any) => unknown> = {
       beds: asNumber(args?.beds),
       limit: asNumber(args?.limit),
     }),
+  mortgage_estimate: (args: any) => {
+    const price = asNumber(args?.price);
+    const householdIncome = asNumber(args?.householdIncome);
+    const terms = {
+      downPct: asNumber(args?.downPct) ?? NaN,
+      ratePct: asNumber(args?.ratePct) ?? NaN,
+      amortYears: asNumber(args?.amortYears) ?? 25,
+    };
+    try {
+      if (price === undefined && householdIncome === undefined) {
+        return { error: "Give a price, a householdIncome, or both." };
+      }
+      const payment = price === undefined ? null : computeMortgage({ price, ...terms });
+      if (householdIncome === undefined) return payment;
+      // Validates the terms once at the minimum price so bad inputs are reported, not silently unaffordable.
+      computeMortgage({ price: MIN_PRICE, ...terms });
+      const maxAffordablePrice = maxPriceForIncome({ householdIncome, ...terms });
+      return { ...(payment ?? {}), householdIncome, maxAffordablePrice };
+    } catch (error) {
+      if (error instanceof MortgageError) return { error: error.message };
+      throw error;
+    }
+  },
   search_docs: (args: any) => {
     const query = asString(args?.query);
     const results = retrieveDocs(query, asNumber(args?.limit));

@@ -14,13 +14,14 @@ const text = (result: Awaited<ReturnType<Client["callTool"]>>): string =>
   (result.content as { type: string; text: string }[])[0].text;
 
 describe("mcp server", () => {
-  it("lists the 6 agent tools", async () => {
+  it("lists the 7 agent tools", async () => {
     const client = await connectClient();
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       "city_snapshot",
       "compare_cities",
       "find_deals",
+      "mortgage_estimate",
       "rank_areas",
       "search_docs",
       "search_listings",

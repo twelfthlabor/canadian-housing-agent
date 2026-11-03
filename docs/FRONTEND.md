@@ -18,6 +18,25 @@ research on X, access limitations, and geographic provenance are documented in
   available in the index.
 - Compare two cities using the workspace tab or a city's Compare control.
   Bedroom bars use a shared zero baseline across both cities, with exact prices.
+- Open the Data view for a national listings explorer: search by address, city
+  or FSA; filter by city (or all cities), province, beds, and minimum/maximum
+  price; sort by lowest or highest price, newest sighting, or biggest discount;
+  and page with “Load more”. Filters are reflected in the request, updates are
+  debounced, and the table shows skeleton rows while it loads. Choosing a city
+  here also selects it on the map.
+- A city’s detail tray has an affordability tab: an illustrative mortgage
+  calculator (purchase price, down payment, rate, amortization) that shows the
+  monthly payment, the CMHC premium when down payment is under 20%, and the
+  stress-test income estimate. A budget check takes a household income and
+  shows the highest price that fits the 39% limit on those terms, and how many
+  sampled listings in the city are at or below it. It follows the same
+  arithmetic as the `mortgage_estimate` agent tool.
+- The explorer's filters are mirrored into the URL (`dq`, `dprov`, `dbeds`,
+  `dmin`, `dmax`, `dsort`, and `dscope=all` for all cities), so a filtered view
+  survives a reload or can be shared. When a city has no listings in the chosen
+  province, the empty state says so and offers “Show all cities”.
+- Numbers count up when they change, city rows and listings rise in with a short
+  stagger, and comparison bars grow in. All of this respects reduced motion.
 - “Ask about this city” / “Ask about this comparison” opens the agent panel and
   fills a reviewable question. Enter sends; Shift+Enter adds a newline.
 - The agent panel keeps conversation state when closed. New chat clears it.

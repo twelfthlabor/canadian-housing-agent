@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { csvCell, csvDocument, csvRow, parseLimit, parseMinDiscount, GET } from "../app/api/listings/route";
+import { csvCell, csvDocument, csvRow, parseFilters, parseLimit, parseMinDiscount, queryListings, GET } from "../app/api/listings/route";
 import { listings, summary } from "../lib/dataset";
 import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, defaultMinDiscountPct } from "../lib/tools";
 import type { Listing } from "../lib/types";
@@ -162,7 +162,7 @@ describe("/api/listings sort=discount", () => {
     expect(listings.some((row) => row.city === dealCity && (row.discountPct ?? 0) > MAX_DISCOUNT_PCT)).toBe(true);
 
     const body = await getJson(`city=${dealCity}&sort=discount&limit=25`);
-    expect(Object.keys(body).sort()).toEqual(["listings", "returned", "total"]);
+    expect(Object.keys(body).sort()).toEqual(["listings", "nextOffset", "offset", "returned", "total"]);
     expect(body.total).toBe(expected.length);
     expect(body.returned).toBe(Math.min(25, expected.length));
     expect(body.listings).toEqual(expected.slice(0, 25));
@@ -215,5 +215,60 @@ describe("/api/listings sort=discount", () => {
     expect(explicit).toEqual(defaulted);
     expect(explicit.total).toBe(priceSorted.length);
     expect(explicit.listings).toEqual(priceSorted.slice(0, 10));
+  });
+});
+
+describe("national listings query", () => {
+  const rows: Listing[] = [
+    { ...listing, city: "ajax", province: "ON", price: 900_000, beds: 3, seen: "2026-09-10", address: "2 A St", fsa: "L1Z", estValue: 1_000_000, discountPct: 10 },
+    { ...listing, city: "calgary", province: "AB", price: 400_000, beds: 2, seen: "2026-09-12", address: "9 Crescent Rd", fsa: "T2A", estValue: 300_000, discountPct: -33 },
+    { ...listing, city: "toronto", province: "ON", price: 1_500_000, beds: 4, seen: "2026-09-14", address: "5 Bay St", fsa: "M5J", estValue: 1_200_000, discountPct: 25 },
+    { ...listing, city: "toronto", province: "ON", price: 700_000, beds: 2, seen: "2026-09-01", address: "7 Queen St", fsa: "M5V", estValue: null, discountPct: null },
+  ];
+  const run = (query: string) => queryListings(rows, parseFilters(new URLSearchParams(query)));
+
+  it("searches across all cities when no city is given", () => {
+    const result = run("");
+    expect(result.total).toBe(4);
+    expect(result.listings.map(row => row.price)).toEqual([400_000, 700_000, 900_000, 1_500_000]);
+  });
+
+  it("filters by province, price range, beds and FSA", () => {
+    expect(run("province=on").total).toBe(3);
+    expect(run("minPrice=600000&maxPrice=1000000").total).toBe(2);
+    expect(run("beds=2").total).toBe(2);
+    expect(run("fsa=m5j").listings[0].address).toBe("5 Bay St");
+  });
+
+  it("ignores invalid filter values instead of erroring", () => {
+    expect(run("province=ONTARIO").total).toBe(4);
+    expect(run("beds=2.5").total).toBe(4);
+    expect(run("minPrice=abc").total).toBe(4);
+  });
+
+  it("matches free text against address, city and FSA", () => {
+    expect(run("q=crescent").total).toBe(1);
+    expect(run("q=TORONTO").total).toBe(2);
+    expect(run("q=m5v").total).toBe(1);
+  });
+
+  it("sorts newest first, high to low, and by discount", () => {
+    expect(run("sort=newest").listings[0].seen).toBe("2026-09-14");
+    expect(run("sort=price_desc").listings[0].price).toBe(1_500_000);
+    const deals = run("sort=discount&minDiscount=5");
+    expect(deals.total).toBe(2);
+    expect(deals.listings.map(row => row.discountPct)).toEqual([25, 10]);
+  });
+
+  it("pages with offset and reports nextOffset through the route", async () => {
+    const page = queryListings(rows, parseFilters(new URLSearchParams("limit=2&offset=1")));
+    expect(page.total).toBe(4);
+    expect(page.listings.map(row => row.price)).toEqual([700_000, 900_000]);
+
+    const response = await GET(new NextRequest("http://localhost/api/listings?limit=2&offset=0&city=toronto"));
+    const body = await response.json();
+    expect(body.offset).toBe(0);
+    expect(body.returned).toBe(body.listings.length);
+    expect(body.nextOffset === null || body.nextOffset === body.returned).toBe(true);
   });
 });

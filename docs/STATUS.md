@@ -1,3 +1,37 @@
+# Project status: 2026-10-30 (polish pass: national listings, mortgage tool, motion)
+
+## What changed
+
+- `/api/listings` is national by default: optional `city`, `province`, `fsa`,
+  `beds`, `minPrice`/`maxPrice`, free-text `q`, four sorts (`price_asc`,
+  `price_desc`, `newest`, `discount`) and `offset` paging. The response adds
+  `offset` and `nextOffset`. Invalid filters are ignored. Previously a request
+  without `city` returned nothing.
+- New agent tool `mortgage_estimate` (seven tools now): minimum down payment,
+  CMHC premium, monthly payment with semi-annual compounding, stress test, and
+  a GDS-based income estimate. The pure arithmetic lives in `lib/mortgage.ts`
+  and is also the calculator in the city tray.
+- Click-through pass (Playwright, scripted): fixed a mortgage answer that quoted
+  the loan without its CMHC premium, a $100 price being accepted, a blank payment
+  figure, a clipped filter grid, a phone tray whose stats overlapped its actions,
+  and an empty Data view with no explanation for a city and province that do not
+  match. Added a budget check (highest affordable price and sampled listings at
+  or below it), URL-synced explorer filters, and formatted money inputs.
+- Data view is a listings explorer with filters, paging, skeletons, and
+  animated counts. The city tray gained an affordability tab. City rows,
+  comparison bars and counters animate, and reduced motion disables all of it.
+- Docs use the current dataset: 54,658 rows (was 50,014), with derived
+  coverage figures recomputed from `data/listings.json`.
+
+## Verification
+
+- `npm test`, `npx tsc --noEmit`, and the pipeline unittests (see the
+  commands in AGENTS.md). Counts are recorded in the commit message.
+- Cleaning-report figures in DATA.md (131 implausible sqft, 24 FSA mismatches,
+  76 duplicates) were not recomputed: they need the sibling scrape tree.
+
+---
+
 # Project status: 2026-10-05 (rename, MCP, docs search, tracing; 2026-09-28 below)
 
 ## Assessment (2026-10-05)

@@ -417,7 +417,7 @@ describe("eval case parsing", () => {
 
   it("parses every shipped case, including the multi-turn and capability additions", () => {
     const cases = loadCases();
-    expect(cases).toHaveLength(48);
+    expect(cases).toHaveLength(53);
     expect(cases.filter((c) => c.turns).map((c) => c.id)).toEqual(["MT01", "MT02", "MT03", "MT04"]);
     expect(cases.find((c) => c.id === "C01")?.expect).toEqual({
       tool: "city_snapshot",
@@ -430,6 +430,20 @@ describe("eval case parsing", () => {
     for (const id of ["MT01", "MT02", "MT03", "MT04", "C01", "C02"]) {
       expect(cases.find((c) => c.id === id)?.rationale).toBeTruthy();
     }
+  });
+
+  it("parses the mortgage cases and their numeric sources", () => {
+    const cases = loadCases();
+    expect(cases.find((c) => c.id === "M01")?.expect).toEqual({
+      tool: "mortgage_estimate",
+      args: { price: 700_000, downPct: 20, ratePct: 4.5 },
+    });
+    expect(cases.find((c) => c.id === "M02")?.expect).toEqual({
+      tool: "mortgage_estimate",
+      args: { householdIncome: 150_000, downPct: 20, ratePct: 4.5 },
+    });
+    const numeric = cases.find((c) => c.id === "MN02")?.checks[0];
+    expect(numeric).toMatchObject({ type: "numeric", source: { kind: "mortgage_budget", householdIncome: 150_000 } });
   });
 
   it("parses the Canada-widened cases", () => {
