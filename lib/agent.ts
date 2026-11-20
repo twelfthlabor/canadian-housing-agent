@@ -5,6 +5,7 @@
 
 import { TOOL_IMPLS, TOOL_SPECS } from "./tools";
 import { ProviderError } from "./providers";
+import { checkGrounding } from "./grounding";
 import type { ChatMessage, Provider, ToolSpec } from "./providers";
 
 export const MAX_LLM_CALLS_PER_TURN = 4;
@@ -42,6 +43,8 @@ export type AgentEvent =
   | { type: "tool"; name: string; args: Record<string, unknown> }
   | { type: "tool_result"; name: string; summary: string; data?: unknown }
   | { type: "cached" }
+  /** Figures in the final answer checked against this turn's tool results and the conversation. */
+  | { type: "grounding"; checked: number; ungrounded: string[] }
   | { type: "done" }
   | AgentErrorEvent;
 
@@ -203,6 +206,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
 
   let llmCalls = 0;
   let toolIterations = 0;
+  const toolResults: unknown[] = [];
 
   while (llmCalls < maxLlmCalls) {
     try {
@@ -234,6 +238,15 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
         yield {
           type: "text",
           delta: "I could not produce an answer for that. Try rephrasing the question.",
+        };
+      } else {
+        yield {
+          type: "grounding",
+          ...checkGrounding({
+            answer: text,
+            toolResults,
+            messages: options.messages.map((message) => message.content),
+          }),
         };
       }
       yield { type: "done" };
@@ -276,6 +289,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
 
       yield { type: "tool", name: call.name, args };
       const result = executeTool(call.name, args);
+      toolResults.push(result);
       yield {
         type: "tool_result",
         name: call.name,

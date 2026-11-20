@@ -558,3 +558,46 @@ describe("api/chat route guards (no network)", () => {
     await response.text();
   });
 });
+
+describe("runtime grounding", () => {
+  function snapshotThenAnswer(answer: (snapshot: CitySnapshot) => string): Provider {
+    let calls = 0;
+    return {
+      name: "scripted",
+      async *stream() {
+        calls += 1;
+        if (calls === 1) {
+          yield { type: "tool_call", id: "call_1", name: "city_snapshot", arguments: JSON.stringify({ city: "ottawa" }) };
+          return;
+        }
+        yield { type: "text", delta: answer(TOOL_IMPLS.city_snapshot({ city: "ottawa" }) as CitySnapshot) };
+      },
+    };
+  }
+
+  function groundingOf(events: AgentEvent[]) {
+    return events.find((event): event is Extract<AgentEvent, { type: "grounding" }> => event.type === "grounding");
+  }
+
+  it("reports every figure as grounded when the answer quotes the tool", async () => {
+    const events = await collect("Median in Ottawa?", snapshotThenAnswer(
+      (s) => `Ottawa's median asking price is $${s.medianPrice.toLocaleString("en-CA")} across ${s.count.toLocaleString("en-CA")} listings.`,
+    ));
+    expect(groundingOf(events)).toEqual({ type: "grounding", checked: 2, ungrounded: [] });
+    expect(events.at(-1)).toEqual({ type: "done" });
+  });
+
+  it("flags a figure the tool did not return", async () => {
+    const events = await collect("Median in Ottawa?", snapshotThenAnswer(
+      (s) => `Ottawa's median asking price is $${(s.medianPrice * 3 + 12_345).toLocaleString("en-CA")}.`,
+    ));
+    const grounding = groundingOf(events);
+    expect(grounding?.checked).toBe(1);
+    expect(grounding?.ungrounded).toHaveLength(1);
+  });
+
+  it("emits a zero-figure grounding event for an answer without numbers", async () => {
+    const events = await collect("Hello", { name: "plain", async *stream() { yield { type: "text", delta: "Ask me about a city." }; } });
+    expect(groundingOf(events)).toEqual({ type: "grounding", checked: 0, ungrounded: [] });
+  });
+});

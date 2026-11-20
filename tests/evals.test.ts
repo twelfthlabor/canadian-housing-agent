@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildCaseReport,
   buildReport,
-  collectGroundTruth,
   evaluateCaseOutcome,
   expectedArgsFailure,
   loadCases,
@@ -11,6 +10,7 @@ import {
   qualityGatePassed,
   runAgentCase,
 } from "../evals/run";
+import { collectGroundTruth } from "../lib/grounding";
 import { createMockProvider } from "../lib/providers";
 import type { ChatMessage, Provider } from "../lib/providers";
 import { citySnapshot } from "../lib/tools";
@@ -675,6 +675,7 @@ describe("eval report", () => {
     "cases",
     "complete_suite",
     "finished_at",
+    "grounding_rate",
     "mode",
     "plumbing_only",
     "provider",

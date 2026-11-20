@@ -40,6 +40,7 @@ import type { Provider } from "../lib/providers";
 import { TOOL_IMPLS, citySnapshot, findDeals, searchListings } from "../lib/tools";
 import type { CitySnapshot } from "../lib/types";
 import { computeMortgage, maxPriceForIncome } from "../lib/mortgage";
+import { collectGroundTruth, extractNumbers, isGrounded, type Extracted, type GroundingResult } from "../lib/grounding";
 
 /* -------------------------------------------------------------------------
  * Types
@@ -97,6 +98,8 @@ type TurnOutcome = {
   answer: string;
   toolEvents: ToolEvent[];
   error?: string;
+  /** The agent's own grounding check on this answer, when it emitted one. */
+  grounding?: GroundingResult;
 };
 
 type RunOutcome = TurnOutcome & {
@@ -119,6 +122,9 @@ type CaseReport = {
   tool_events: ToolEvent[];
   /** Multi-turn cases only: answer, tool names and error for each user turn. */
   turns?: TurnReport[];
+  /** Final-answer figures the runtime grounding check could not trace to a tool result. */
+  ungrounded?: string[];
+  figures_checked?: number;
 };
 
 const CATEGORIES: Category[] = ["tool_choice", "numeric", "scope_refusal"];
@@ -374,44 +380,12 @@ function resolveExpected(source: NumericSource): Resolved {
  * Answer number extraction and matching
  * ---------------------------------------------------------------------- */
 
-type Extracted = { value: number; kind: "money" | "percent" | "plain"; raw: string };
-
-function parseNumberString(raw: string): number {
-  return Number(raw.replace(/,/g, ""));
-}
-
-function suffixMultiplier(suffix?: string): number {
-  switch (suffix?.toLowerCase()) {
-    case "k":
-    case "thousand":
-      return 1e3;
-    case "m":
-    case "million":
-      return 1e6;
-    case "bn":
-    case "billion":
-      return 1e9;
-    default:
-      return 1;
-  }
-}
-
-function extractNumbers(text: string): Extracted[] {
-  const out: Extracted[] = [];
-  // One pass keeps a currency amount from also becoming a plain count.
-  const pattern = /(?<![\w.])(?:(\$|CAD)\s*)?(\d[\d,]*(?:\.\d+)?)(?:\s*(billion|million|thousand|bn|k|m)\b)?(?:\s*(%|percent\b|per cent\b|CAD\b))?/gi;
-  for (const match of text.matchAll(pattern)) {
-    const value = parseNumberString(match[2]) * suffixMultiplier(match[3]);
-    if (!Number.isFinite(value)) continue;
-    const kind = match[4] && match[4].toLowerCase() !== "cad"
-      ? "percent"
-      : match[1] || match[3] || match[4] ? "money" : "plain";
-    out.push({ value, kind, raw: match[0] });
-  }
-  return out;
-}
-
 /** Counts exact; percent within 1 percentage point; prices/sqft within 1% relative. */
+/** An expected value as an exact figure, for the shared tolerance check. */
+function asExtracted(value: number): Extracted {
+  return { value, kind: "plain", raw: String(value) };
+}
+
 function numericMatches(expected: number, unit: Unit, nums: Extracted[]): boolean {
   if (unit === "count") {
     return nums.some((n) => n.kind === "plain" && Number.isInteger(n.value) && Math.abs(n.value - expected) < 1e-9);
@@ -422,41 +396,6 @@ function numericMatches(expected: number, unit: Unit, nums: Extracted[]): boolea
   }
   const tolerance = Math.abs(expected) * 0.01;
   return nums.some((n) => n.kind !== "percent" && Math.abs(n.value - expected) <= tolerance);
-}
-
-export function collectGroundTruth(value: unknown, into: number[]): void {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    into.push(value);
-    if (value > 0 && value <= 1) into.push(value * 100); // shares quoted as percentages
-    return;
-  }
-  if (typeof value === "string") {
-    for (const m of value.matchAll(/\d[\d,]*(?:\.\d+)?/g)) into.push(parseNumberString(m[0]));
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectGroundTruth(item, into);
-    return;
-  }
-  if (value && typeof value === "object") {
-    // shareUnder1M is defined against the $1M threshold; treat that threshold as grounded.
-    const record = value as Record<string, unknown>;
-    if (typeof record.shareUnder1M === "number" && Number.isFinite(record.shareUnder1M)) {
-      into.push(1_000_000);
-    }
-    for (const [key, item] of Object.entries(record)) {
-      // Postal digits, street numbers and zpid strings are not price evidence.
-      if (key === "address" || key === "url") continue;
-      collectGroundTruth(item, into);
-    }
-  }
-}
-
-function isGrounded(value: number, grounded: number[]): boolean {
-  return grounded.some((g) => {
-    const tolerance = Math.max(Math.abs(value) * 0.01, Math.abs(g) * 0.01, 0.01);
-    return Math.abs(g - value) <= tolerance;
-  });
 }
 
 /* -------------------------------------------------------------------------
@@ -564,10 +503,10 @@ function evaluateRefusal(
   }
 
   const ungrounded = extractNumbers(answer).filter((n) => {
-    if (n.kind !== "plain") return !isGrounded(n.value, grounded);
+    if (n.kind !== "plain") return !isGrounded(n, grounded);
     // Plain integers >= 10k read as prices; years 1900-2100 never do.
     const priceLike = Number.isInteger(n.value) && n.value >= 10_000 && !(n.value >= 1900 && n.value <= 2100);
-    return priceLike && !isGrounded(n.value, grounded);
+    return priceLike && !isGrounded(n, grounded);
   });
   for (const number of ungrounded.slice(0, 3)) failures.push(`ungrounded number "${number.raw.trim()}"`);
 
@@ -579,10 +518,12 @@ async function collectTurn(messages: AgentInputMessage[], provider: Provider): P
   const grounded: number[] = [];
   let answer = "";
   let error: string | undefined;
+  let grounding: GroundingResult | undefined;
 
   try {
     for await (const event of runAgent({ messages, provider })) {
       if (event.type === "text") answer += event.delta;
+      else if (event.type === "grounding") grounding = { checked: event.checked, ungrounded: event.ungrounded };
       else if (event.type === "tool") {
         toolEvents.push({ name: event.name, args: event.args });
         const impl = TOOL_IMPLS[event.name];
@@ -603,7 +544,7 @@ async function collectTurn(messages: AgentInputMessage[], provider: Provider): P
     error = err instanceof Error ? err.message : String(err);
   }
 
-  return { answer: answer.trim(), toolEvents, grounded, error };
+  return { answer: answer.trim(), toolEvents, grounded, error, grounding };
 }
 
 /**
@@ -702,7 +643,7 @@ export function evaluateCaseOutcome(c: EvalCase, outcome: RunOutcome): { passed:
           failures.push(`ground truth: ${err instanceof Error ? err.message : String(err)}`);
           continue;
         }
-        if (outcome.toolEvents.length === 0 || !isGrounded(resolved.value, outcome.grounded)) {
+        if (outcome.toolEvents.length === 0 || !isGrounded(asExtracted(resolved.value), outcome.grounded)) {
           failures.push(`numeric: ${resolved.label} was not grounded in a tool result`);
         }
         const unit = check.unit ?? resolved.unit;
@@ -745,6 +686,10 @@ export function buildCaseReport(c: EvalCase, outcome: RunOutcome): CaseReport {
     answer: outcome.answer,
     tool_events: outcome.toolEvents,
   };
+  if (outcome.grounding) {
+    row.figures_checked = outcome.grounding.checked;
+    row.ungrounded = outcome.grounding.ungrounded;
+  }
   if (outcome.turns) {
     row.turns = outcome.turns.map((turn) => ({
       answer: turn.answer,
@@ -771,8 +716,16 @@ type EvalReport = {
     by_category: Record<string, { cases: number; passed: number }>;
   };
   scores: { tool_accuracy: number | null; numeric_accuracy: number | null; refusal_accuracy: number | null };
+  /** Share of answers with figures where every figure traced to a tool result. Reported, not gated. */
+  grounding_rate: number | null;
   cases: CaseReport[];
 };
+
+export function groundingRate(cases: CaseReport[]): number | null {
+  const rows = cases.filter((row) => (row.figures_checked ?? 0) > 0);
+  if (rows.length === 0) return null;
+  return rows.filter((row) => (row.ungrounded ?? []).length === 0).length / rows.length;
+}
 
 function scoreOf(cases: CaseReport[], category: Category): number | null {
   const rows = cases.filter((row) => row.category === category);
@@ -819,6 +772,7 @@ export function buildReport(
     finished_at: new Date().toISOString(),
     totals,
     scores,
+    grounding_rate: groundingRate(cases),
     cases,
   };
 }

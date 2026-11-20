@@ -1,5 +1,5 @@
 import { listings, summary } from "./dataset";
-import { MIN_PRICE, MortgageError, computeMortgage, maxPriceForIncome } from "./mortgage";
+import { GDS_LIMIT, MIN_PRICE, MortgageError, computeMortgage, maxPriceForIncome } from "./mortgage";
 import type {
   AreaRank,
   CitySnapshot,
@@ -729,12 +729,14 @@ export const TOOL_IMPLS: Record<string, (args: any) => unknown> = {
       if (price === undefined && householdIncome === undefined) {
         return { error: "Give a price, a householdIncome, or both." };
       }
-      const payment = price === undefined ? null : computeMortgage({ price, ...terms });
+      // The GDS limit is stated in answers, so it travels in the result the grounding check reads.
+      const gdsLimitPct = GDS_LIMIT * 100;
+      const payment = price === undefined ? null : { ...computeMortgage({ price, ...terms }), gdsLimitPct };
       if (householdIncome === undefined) return payment;
       // Validates the terms once at the minimum price so bad inputs are reported, not silently unaffordable.
       computeMortgage({ price: MIN_PRICE, ...terms });
       const maxAffordablePrice = maxPriceForIncome({ householdIncome, ...terms });
-      return { ...(payment ?? {}), householdIncome, maxAffordablePrice };
+      return { ...(payment ?? {}), householdIncome, maxAffordablePrice, gdsLimitPct };
     } catch (error) {
       if (error instanceof MortgageError) return { error: error.message };
       throw error;
