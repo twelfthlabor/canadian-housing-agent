@@ -257,10 +257,14 @@ describe("national listings query", () => {
     expect(run("sort=newest").listings[0].seen).toBe("2026-09-14");
     expect(run("sort=price_desc").listings[0].price).toBe(1_500_000);
     const deals = run("sort=discount&minDiscount=5");
-    expect(deals.total).toBe(2);
-    expect(deals.listings.map(row => row.discountPct)).toEqual([48, 30]);
-    // Toronto's noise floor (twice its typical error) rules out a 30% discount there.
-    expect(cityDealFloorPct("toronto")).toBeGreaterThan(30);
+    // Each row must clear its own city's noise floor; computed so a data refresh cannot break it.
+    const expected = rows
+      .filter(row => row.discountPct !== null && row.estValue !== null && row.price >= DEAL_MIN_PRICE &&
+        row.discountPct >= Math.max(5, cityDealFloorPct(row.city)) && row.discountPct <= MAX_DISCOUNT_PCT)
+      .map(row => row.discountPct)
+      .sort((a, b) => Number(b) - Number(a));
+    expect(deals.total).toBe(expected.length);
+    expect(deals.listings.map(row => row.discountPct)).toEqual(expected);
   });
 
   it("pages with offset and reports nextOffset through the route", async () => {

@@ -241,10 +241,14 @@ describe("citySnapshot", () => {
   });
 
   it("flags small samples and leaves large ones unchanged", () => {
-    expect(citySnapshot("winnipeg")).toMatchObject({ count: summary.cities.winnipeg.count, thinSample: true, thinSampleThreshold: 100 });
-    expect(citySnapshot("ottawa")?.thinSample).toBeUndefined();
+    // Cities are picked from the data so a refresh cannot invalidate the test.
+    const thinCity = cities.find((city) => summary.cities[city].count < 100) as string;
+    expect(thinCity).toBeDefined();
+    expect(citySnapshot(thinCity)).toMatchObject({ count: summary.cities[thinCity].count, thinSample: true, thinSampleThreshold: 100 });
+    expect(summary.cities[topCity].count).toBeGreaterThanOrEqual(100);
+    expect(citySnapshot(topCity)?.thinSample).toBeUndefined();
     // A filtered slice of a large city can be thin too.
-    const slice = citySnapshot({ city: "ottawa", beds: 5, minPrice: 3_000_000 });
+    const slice = citySnapshot({ city: topCity, beds: 5, minPrice: 3_000_000 });
     if (slice) expect(slice.thinSample).toBe(slice.count < 100 ? true : undefined);
   });
 
@@ -699,11 +703,15 @@ describe("findDeals", () => {
     expect(result?.note).toContain(`${MAX_DISCOUNT_PCT}%`);
   });
 
-  it("calls far fewer Hamilton listings deals than the old flat 20% floor did", () => {
-    const result = findDeals({ city: "hamilton" });
-    const flat = expectedMatches("hamilton", 20).filter((row) => discountOf(row) <= MAX_DISCOUNT_PCT).length;
-    expect(result?.totalMatches).toBe(expectedMatches("hamilton", cityDealFloorPct("hamilton")).length);
-    expect(result?.totalMatches as number).toBeLessThan(flat / 2);
+  it("calls fewer deals at the noise floor than a flat 20% threshold would", () => {
+    // The city with the most flat-threshold matches, picked from the data.
+    const knownWithEstimates = knownCities().filter((city) => findDeals({ city })!.considered > 0);
+    const busiest = knownWithEstimates.reduce((best, city) =>
+      expectedMatches(city, 20).length > expectedMatches(best, 20).length ? city : best);
+    const floor = cityDealFloorPct(busiest);
+    const result = findDeals({ city: busiest });
+    expect(result?.totalMatches).toBe(floor > MAX_DISCOUNT_PCT ? 0 : expectedMatches(busiest, floor).length);
+    if (floor > 20) expect(result?.totalMatches as number).toBeLessThan(expectedMatches(busiest, 20).length);
   });
 
   it("sorts discount descending then price then address, and returns copies with all 12 fields", () => {

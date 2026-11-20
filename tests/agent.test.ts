@@ -596,6 +596,26 @@ describe("runtime grounding", () => {
     expect(grounding?.ungrounded).toHaveLength(1);
   });
 
+  it("checks figures in text written before a tool call, not only the final reply", async () => {
+    let calls = 0;
+    const preamble: Provider = {
+      name: "preamble",
+      async *stream() {
+        calls += 1;
+        if (calls === 1) {
+          yield { type: "text", delta: "Ottawa usually asks about $2,345,678. Let me check. " };
+          yield { type: "tool_call", id: "call_1", name: "city_snapshot", arguments: JSON.stringify({ city: "ottawa" }) };
+          return;
+        }
+        const snapshot = TOOL_IMPLS.city_snapshot({ city: "ottawa" }) as CitySnapshot;
+        yield { type: "text", delta: `The median is $${snapshot.medianPrice.toLocaleString("en-CA")}.` };
+      },
+    };
+    const grounding = groundingOf(await collect("Median in Ottawa?", preamble));
+    expect(grounding?.checked).toBe(2);
+    expect(grounding?.ungrounded).toEqual(["$2,345,678"]);
+  });
+
   it("emits a zero-figure grounding event for an answer without numbers", async () => {
     const events = await collect("Hello", { name: "plain", async *stream() { yield { type: "text", delta: "Ask me about a city." }; } });
     expect(groundingOf(events)).toEqual({ type: "grounding", checked: 0, ungrounded: [] });

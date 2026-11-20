@@ -209,6 +209,8 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
   let llmCalls = 0;
   let toolIterations = 0;
   const toolResults: unknown[] = [];
+  // Everything the user sees this turn, including text written before a tool call.
+  let shownText = "";
 
   while (llmCalls < maxLlmCalls) {
     try {
@@ -225,6 +227,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
       for await (const event of options.provider.stream(messages, toolSpecs, options.signal)) {
         if (event.type === "text") {
           text += event.delta;
+          shownText += event.delta;
           yield { type: "text", delta: event.delta };
         } else {
           calls.push({ id: event.id, name: event.name, arguments: event.arguments });
@@ -245,7 +248,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
         yield {
           type: "grounding",
           ...checkGrounding({
-            answer: text,
+            answer: shownText,
             toolResults,
             messages: options.messages.map((message) => message.content),
           }),

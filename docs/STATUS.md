@@ -26,7 +26,7 @@
 
 ## Verified (2026-11-20, Windows, Node 24)
 
-- `npx vitest run`: 245 passed. `npx tsc --noEmit`: clean.
+- `npx vitest run`: 246 passed. `npx tsc --noEmit`: clean.
   `python -m unittest discover -s pipeline/tests`: 36 passed (one test was
   failing on Windows path separators; fixed).
 - `npm run build`: passes. Local `MOCK_LLM=1 next start`: Hamilton deals
@@ -34,7 +34,12 @@
   small sample; Montreal tray and label show the caveat at 1440px and 390px.
 - Lighthouse mobile on the local build: accessibility 100, best practices 100,
   SEO 100; CLS 0.075 (inside the 0.1 "good" range).
-- `MOCK_LLM=1 npm run evals`: plumbing only, grounding_rate 1.0.
+- `MOCK_LLM=1 npm run evals`: plumbing only (mock answers are built from tool
+  output, so its grounding_rate of 1.0 says nothing about the model).
+- Check strictness on real tool results for the 20 largest cities, figures moved
+  ±5/10/20%: snapshots accept 4.4/8.1/3.8% of wrong figures, listing searches
+  54.8/45.7/36.8%, deal results 33.4/31.2/30.3%. Listing prices need a
+  per-listing match to tighten this.
 
 ## Not done
 

@@ -1,10 +1,10 @@
 # Canadian Housing Agent
 
 A tool-calling LLM agent that answers questions about 54,658 Canadian for-sale
-listings across 123 cities in 11 provinces, and proves where its numbers come
-from. The model only picks tools and writes the reply; every price, count and
-percentage comes from deterministic functions over the dataset, and each answer
-is checked against the tool results before it is shown.
+listings across 123 cities in 11 provinces, and checks where its numbers come
+from. The model only picks tools and writes the reply; prices, counts and
+percentages come from deterministic functions over the dataset, and each answer
+is checked against the tool results and flagged when a figure does not match.
 
 Live demo: https://canadian-housing-agent.vercel.app
 
@@ -18,7 +18,9 @@ Not an appraisal service, listing service, or source of financial advice. See
   turn's tool results and the conversation, allowing only the rounding the
   answer itself shows ("$1.3 million" covers $1,325,000). The UI prints "All N
   figures match the tool results below" or names the figures it could not
-  trace. The same check scores the eval suite.
+  trace. The same check scores the eval suite. It is a match against the
+  numbers the tools returned, not a proof: see [How strict the check
+  is](#how-strict-the-check-is).
 - **Deals have to clear the model's own error.** `find_deals` only calls a
   listing a deal when its gap to the comparable-listings estimate is at least
   twice that city's typical estimate error (out-of-fold MdAPE) and at most 50%.
@@ -36,15 +38,31 @@ Not an appraisal service, listing service, or source of financial advice. See
 
 | Check | Result |
 | --- | --- |
-| Unit and route tests (`npm test`) | 245 passing |
+| Unit and route tests (`npm test`) | 246 passing |
 | Pipeline tests (`python -m unittest discover -s pipeline/tests`) | 36 passing |
 | Mobile Lighthouse (accessibility / best practices / SEO) | 100 / 100 / 100 |
-| Grounding check, offline harness (`MOCK_LLM=1 npm run evals`) | every checked figure traced |
 | Live eval, 58 cases on `openai/gpt-oss-120b` | not yet completed on the current suite (see below) |
 
 The live suite needs a Groq key and spans the free-tier daily token cap, so it
 runs in parts with `--resume`. The last completed full live pass was the
 32-case gate on 2026-09-16.
+
+## How strict the check is
+
+Measured on real tool results for the 20 largest cities: each returned price
+was moved up and down by 5%, 10% and 20%, rounded to the nearest $1,000, and
+put through the same check.
+
+| Tool result | Wrong figure still accepted (±5% / ±10% / ±20%) |
+| --- | --- |
+| `city_snapshot` | 4.4% / 8.1% / 3.8% |
+| `search_listings` (25 listings) | 54.8% / 45.7% / 36.8% |
+| `find_deals` (25 listings with estimates) | 33.4% / 31.2% / 30.3% |
+
+For city statistics the check catches more than nine in ten wrong figures. For
+listing results it is weak: with dozens of prices in a result, a wrong price is
+often within 1% of some other listing's price. Tying each quoted price to the
+listing it is quoted for would close that gap.
 
 ## What the agent can do
 
