@@ -1,76 +1,111 @@
 # Canadian Housing Agent
 
-A free public demo where visitors chat with a tool-calling LLM agent about a
-research sample of 54,658 Canadian for-sale listings across 123 cities in 11 provinces. The agent
-answers questions like "median asking price for a 3-bed in Hamilton?" or "how
-many listings are in M6P?" by calling deterministic search and stats functions
-over a JSON dataset. Numbers come from those functions; the model picks tools
-and writes the reply. Search and snapshot tools accept a 3-character FSA (a full
-postal code is reduced to it), and snapshots accept price, bedroom, and
-minimum-bath filters. The agent can also rank a city's postal areas by median
-asking price or listing count, and it can surface listings asking below an
-offline comparable-listings estimate (`find_deals`): the estimated typical
-asking price from comparable asking prices, not an appraisal, sold price, or
-investment advice. It can also work out an illustrative Canadian mortgage (down-payment minimum, CMHC premium, monthly payment, and the stress test) with `mortgage_estimate`, or the highest price a household income supports. Search answers render up to six listing cards (each with its
-address and a link to the source listing) and a sample-size line. Tool-using
-answers include a collapsed "How this answer was computed" block with the raw
-tool calls. The atlas has a Data tab: a national listings explorer with city, province, beds, price range, free-text search, four sorts, and paging, plus a CSV export. A city's detail tray has an affordability calculator with the same arithmetic as the agent tool. Its state (city, compare pair, sort, price ceiling, tab, view) is
-mirrored into the URL so a view can be shared. The agent has seven tools;
-`search_docs` answers questions about the project itself from its own
-documentation (see [Docs search](#docs-search-search_docs)).
+A tool-calling LLM agent that answers questions about 54,658 Canadian for-sale
+listings across 123 cities in 11 provinces, and proves where its numbers come
+from. The model only picks tools and writes the reply; every price, count and
+percentage comes from deterministic functions over the dataset, and each answer
+is checked against the tool results before it is shown.
 
 Live demo: https://canadian-housing-agent.vercel.app
 
 Not an appraisal service, listing service, or source of financial advice. See
 [Disclaimers](#disclaimers).
 
-## Who it is for
+## What makes it different
 
-- Visitors who want quick, data-grounded answers about asking prices in the
-  covered cities.
-- Developers looking for a small, readable example of a tool-calling agent loop
-  with rate-limit guardrails and a deterministic offline test mode.
+- **Answers are checked, not trusted.** After every answer, `lib/grounding.ts`
+  extracts each money figure, percentage and count and matches it against that
+  turn's tool results and the conversation, allowing only the rounding the
+  answer itself shows ("$1.3 million" covers $1,325,000). The UI prints "All N
+  figures match the tool results below" or names the figures it could not
+  trace. The same check scores the eval suite.
+- **Deals have to clear the model's own error.** `find_deals` only calls a
+  listing a deal when its gap to the comparable-listings estimate is at least
+  twice that city's typical estimate error (out-of-fold MdAPE) and at most 50%.
+  In Hamilton that is 69 listings instead of the 425 a flat 20% threshold
+  produced; where the estimate is too noisy, the tool returns no deals and says
+  why.
+- **Small samples are labelled.** 48 of 123 cities have fewer than 100
+  listings. Their medians carry a small-sample flag in the tool result, a
+  caveat in the answer, a dashed label on the map, and no headline label at all
+  under 30 listings.
+- **Everything is shown.** Tool-using answers include a "How this answer was
+  computed" block with the raw tool calls and results.
+
+## Results
+
+| Check | Result |
+| --- | --- |
+| Unit and route tests (`npm test`) | 245 passing |
+| Pipeline tests (`python -m unittest discover -s pipeline/tests`) | 36 passing |
+| Mobile Lighthouse (accessibility / best practices / SEO) | 100 / 100 / 100 |
+| Grounding check, offline harness (`MOCK_LLM=1 npm run evals`) | every checked figure traced |
+| Live eval, 58 cases on `openai/gpt-oss-120b` | not yet completed on the current suite (see below) |
+
+The live suite needs a Groq key and spans the free-tier daily token cap, so it
+runs in parts with `--resume`. The last completed full live pass was the
+32-case gate on 2026-09-16.
+
+## What the agent can do
+
+Six tools, all deterministic and read-only:
+
+| Tool | Answers |
+| --- | --- |
+| `city_snapshot` | Median, quartiles, count, share under $1M and median by bedrooms for a city, optionally filtered by FSA, price, beds or baths |
+| `search_listings` | Matching listings with address and source link, up to six as cards |
+| `compare_cities` | Side-by-side snapshots |
+| `rank_areas` | A city's postal areas (FSAs) by median asking price or listing count |
+| `find_deals` | Listings asking well below the comparable-listings estimate, within the noise rules above |
+| `mortgage_estimate` | Minimum down payment, CMHC premium, monthly payment, OSFI stress test and the income the 39% GDS limit implies; or the highest price an income supports |
+
+The atlas around the chat has a map, a city list with a price ceiling, a
+two-city comparison, an affordability calculator using the same arithmetic as
+the agent tool, and a Data tab: a national listings explorer with filters,
+sorts, paging and CSV export. View state is mirrored into the URL.
 
 ## Quickstart
 
-These steps run the demo locally; the live demo is at the URL above.
-Requires Node.js 24 and Python 3. Run all commands from this directory
-(`canadian-housing-agent/`), with the `property-scraper` checkout as a sibling.
+Requires Node.js 24 and Python 3. Run commands from this directory, with the
+`property-scraper` checkout as a sibling.
 
 ```bash
 npm install
-npm run embed:docs                           # writes data/docs_index.json (docs search index)
 python3 pipeline/build_dataset.py            # writes data/listings.json + data/market_summary.json
 MOCK_LLM=1 npm run dev                       # open the URL printed by Next.js
-npm test                                     # vitest: tools, agent, guards, routes, providers, observability, rag, mcp, langfuse, evals
+npm test                                     # vitest: tools, agent, grounding, guards, routes, providers, observability, mcp, langfuse, evals
 npm run build                                # production build; npm start serves it
 MOCK_LLM=1 npm run evals                     # golden harness, plumbing only (no network)
 ```
 
-`MOCK_LLM=1` runs a deterministic mock instead of calling Groq, so the quickstart
-needs no API key. For the real model, put `GROQ_API_KEY` in `.env.local` and run `npm run dev`
-without `MOCK_LLM=1`. The app shows an offline-demo notice when using scripted replies.
-Both Next.js and `npm run evals` load `.env.local`; exported environment variables
-take precedence for the eval command. Restart the server after changing providers or data.
+`MOCK_LLM=1` runs a deterministic mock instead of calling Groq, so the
+quickstart needs no API key. For the real model, put `GROQ_API_KEY` in
+`.env.local` and run `npm run dev` without `MOCK_LLM=1`.
 
-`npm run evals` runs the 48 golden cases (21 tool choice, including 4
-multi-turn cases, 2 capability cases for filtered snapshots and area rankings,
-3 Canada tool cases, 1 deal case, and 1 docs case for `search_docs`; 14
-numeric, including 2 deal cases; 13 refusals) and needs `GROQ_API_KEY` for live scoring;
-without a key it exits 1 with instructions. `MOCK_LLM=1 npm run evals` runs the
-plumbing only. Each run writes `evals/report.json`, which is gitignored, and
-the harness updates it after every case so an aborted run keeps partial
-results. Reports include the answers and tool arguments for diagnosis. Live
-bars: tool choice >= 0.90, numeric >= 0.95, refusals 1.00. `quality_gate_passed`
-stays false for mock runs and partial runs (`--limit`, `--category` or `--ids` selecting
-fewer than all cases), even if their selected cases pass. The last completed
-full live pass is the 32-case gate from 2026-09-16; the 53-case suite has not
-completed a live run (2026-09-17 attempts hit the Groq free-tier daily token
-cap).
+`pipeline/build_dataset.py` reads `../property-scraper/data/regions` by
+default; pass `--source <dir>` to point it elsewhere. Listing ids are used for
+dedupe and never written.
 
-`pipeline/build_dataset.py` reads `../property-scraper/data/regions` by default;
-pass `--source <dir>` to point it elsewhere. Listing ids are used for dedupe and
-never written.
+## Evals
+
+`npm run evals` runs 58 golden cases against the real agent loop, prompt and
+provider: 27 tool-choice cases (including misspelled cities, a two-tool
+question, elliptical follow-ups and a too-noisy deal city), 17 numeric cases
+whose expected values are computed from the dataset at run time, and 14
+refusals. Live bars: tool choice >= 0.90, numeric >= 0.95, refusals 1.00. The
+report also records a `grounding_rate`: the share of answers with figures where
+every figure traced to a tool result.
+
+```bash
+npm run evals                                # full live run, needs GROQ_API_KEY
+npm run evals -- --resume                    # keep completed rows from the last report for the same model, run the rest
+GROQ_MODEL=<model id> npm run evals          # run the same suite on another Groq model; the report records the model
+npm run evals -- --category numeric          # one category (never passes the full-suite gate)
+```
+
+Each run writes `evals/report.json` (gitignored) after every case, so an
+aborted run keeps its rows. `quality_gate_passed` is true only for a live run
+whose rows cover every case.
 
 ## Environment variables
 
@@ -78,13 +113,12 @@ never written.
 | --- | --- |
 | `GROQ_API_KEY` | Groq API key. Required to call the real model; not needed with `MOCK_LLM=1`. |
 | `GROQ_MODEL` | Override the Groq model id; the demo uses `openai/gpt-oss-120b`. |
-| `GEMINI_API_KEY` | Optional fallback provider, used only when set and a Groq call fails before emitting output. Groq remains the primary free provider. Keep billing disabled on both accounts. |
+| `GEMINI_API_KEY` | Optional fallback provider, used only when set and a Groq call fails before emitting output. Keep billing disabled on both accounts. |
 | `GEMINI_MODEL` | Optional fallback model override; defaults to `gemini-2.5-flash-lite`. |
 | `MOCK_LLM` | Set to `1` to use the deterministic mock LLM (tests/CI; no key needed). |
-| `LANGFUSE_PUBLIC_KEY` | Optional Langfuse public key. Set with the secret key to enable metadata-only tracing; unset means tracing is a no-op. |
+| `LANGFUSE_PUBLIC_KEY` | Optional Langfuse public key. Set with the secret key to enable metadata-only tracing. |
 | `LANGFUSE_SECRET_KEY` | Optional Langfuse secret key. |
-| `LANGFUSE_BASE_URL` | Optional Langfuse endpoint override (for example a self-hosted instance); defaults to Langfuse cloud. |
-| `DATABASE_URL` | Optional Postgres connection for the local pgvector demo (`npm run seed:pgvector`); defaults to `postgres://postgres:postgres@localhost:5432/agent`. Not read by the app at runtime. |
+| `LANGFUSE_BASE_URL` | Optional Langfuse endpoint override; defaults to Langfuse cloud. |
 
 ## Architecture
 
@@ -99,16 +133,20 @@ pipeline/build_dataset.py   dedupe by listing id -> filter -> extract FSA -> hmb
         v
 data/listings.json          54,658 listings incl. province, address, source URL,
                             estValue + discountPct
-data/market_summary.json    per-city aggregates
+data/market_summary.json    per-city aggregates and valuation error by city
         |
         v
-lib/tools.ts                deterministic search/stats (incl. rank_areas, find_deals, mortgage_estimate, search_docs) + OpenAI-style tool schemas
-lib/mortgage.ts              pure Canadian mortgage arithmetic (CMHC, stress test, GDS income estimate)
-lib/embed.ts + lib/rag.ts   pure hash-v1 encoder + docs-index cosine retrieval (keyless, in-memory)
+lib/tools.ts                deterministic search/stats tools + OpenAI-style tool schemas
+lib/deals.ts, lib/sample.ts deal-window and small-sample rules shared with the UI
+lib/mortgage.ts             Canadian mortgage arithmetic (CMHC, stress test, GDS)
         |
         v
-/api/chat (Next.js)         agent loop, streamed over SSE
-        |    events: text, tool, tool_result, cached, done, error
+lib/agent.ts                tool loop (3 tool calls, 4 LLM calls per turn)
+lib/grounding.ts            checks the final answer's figures against the tool results
+        |
+        v
+/api/chat (Next.js)         streamed over SSE
+        |    events: text, tool, tool_result, grounding, cached, done, error
         |    guardrails: 5 req/min + 30 req/day per IP, 800 LLM calls/day global,
         |                standalone exact-question cache (15-minute TTL)
         v
@@ -116,13 +154,15 @@ Groq openai/gpt-oss-120b    primary free provider (MOCK_LLM=1 -> deterministic m
 Gemini gemini-2.5-flash-lite     optional fallback when GEMINI_API_KEY is set and Groq fails
 ```
 
+Each turn logs one metadata-only `chat_turn` line (duration, cache hit, tool
+names, error code, figures checked and figures not traced); message content,
+answers and IPs are never logged.
+
 ## MCP server
 
-`mcp/server.ts` exposes the project's tool definitions over MCP stdio, reusing
-`TOOL_SPECS` from `lib/tools.ts` verbatim (schemas passed through unchanged;
-currently all seven tools, including `search_docs` and `mortgage_estimate`). Every tool is a
-deterministic, read-only lookup with no model call. Point a client at an
-absolute path so the server runs from any working directory:
+`mcp/server.ts` exposes the same six tools over MCP stdio, reusing
+`TOOL_SPECS` and `TOOL_IMPLS` verbatim. Every tool is a deterministic,
+read-only lookup with no model call. Point a client at an absolute path:
 
 ```json
 {
@@ -135,69 +175,31 @@ absolute path so the server runs from any working directory:
 }
 ```
 
-`npm run mcp` (tsx) starts the same server for interactive use, but npm's
-script banner is written to stdout and would pollute the protocol stream;
-clients should spawn the command above instead. Stdout then carries protocol
-JSON only, and diagnostics go to stderr.
-
-## Docs search (`search_docs`)
-
-The `search_docs` tool answers questions about the project, its data pipeline,
-and the hmb-v1 estimate from the project's own documentation (README.md plus
-docs/DATA.md, docs/DEMO.md, docs/PLAN.md). Retrieval is deterministic and
-keyless: `lib/embed.ts` is a pure hash encoder (256 dimensions, FNV-1a over
-word unigrams and character 4-grams, L2-normalized) and `lib/rag.ts` ranks the
-indexed passages by cosine similarity. This is a lexical hash embedding, not a
-learned or semantic embedding model; results include their similarity scores.
-The index lives in `data/docs_index.json` and is generated by
-`npm run embed:docs` (markdown-heading sections split into ~800-character windows with
-100 characters of overlap; each window is embedded with its section heading
-prefixed, while the stored text is unchanged). The generated index is tracked
-like `data/listings.json`: regenerate it after editing README.md or
-docs/{DATA,DEMO,PLAN}.md and commit it alongside those changes. `lib/rag.ts`
-imports the index at runtime, so tests and the build need it to exist; the
-generator imports only the pure encoder, so `npm run embed:docs` also works
-when the index is missing. Statistics questions still use the data tools.
-
-## Optional pgvector demo
-
-`docker-compose.yml` plus `npm run seed:pgvector` is a local-only demo of the
-same embeddings in Postgres; the app never uses a database and stays keyless
-and in-memory. `docker compose up -d` starts `pgvector/pgvector:pg17`, and
-`npm run seed:pgvector` loads `data/docs_index.json` into a `docs_embeddings`
-table (`vector(256)`); `npm run seed:pgvector -- --query "discount estimate"`
-also prints the top 3 passages by cosine distance. `DATABASE_URL` defaults to
-`postgres://postgres:postgres@localhost:5432/agent`. This is a demo, not the
-production retrieval path.
+`npm run mcp` starts the same server for interactive use, but npm's script
+banner is written to stdout and would pollute the protocol stream; clients
+should spawn the command above instead.
 
 ## Optional Langfuse tracing
 
-Tracing is off unless `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set
-(`LANGFUSE_BASE_URL` overrides the endpoint). When enabled, each chat turn
-emits one trace (`chat_turn`: `durationMs`, `cached`, `tools`, `errorCode`)
-plus one span per tool call (name and `durationMs`). Only that metadata leaves
-the process: messages, answers, tool arguments, and IPs are never sent. When
-disabled the SDK is not imported and tracing is a no-op; tracing failures are
-swallowed and can never affect a request.
+Tracing is off unless `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set.
+When enabled, each chat turn emits one trace (`durationMs`, `cached`, `tools`,
+`errorCode`) plus one span per tool call. Messages, answers, tool arguments
+and IPs are never sent; tracing failures can never affect a request.
 
 ## Project layout
 
 ```
 canadian-housing-agent/
-├── README.md
-├── mcp/                      MCP stdio server reusing TOOL_SPECS (read-only)
-├── scripts/                  embed_docs.ts (docs index), seed_pgvector.ts (optional demo), canada_refresh.sh, build_geography.py
-├── docs/
-│   ├── PLAN.md               milestones, constraints, known risks
-│   ├── DATA.md               dataset fields, filters, limitations, terms
-│   └── DEMO.md               2-3 minute demo run-through
-├── pipeline/                 Python data build; stdlib unittest coverage
-├── data/                     generated listings.json + market_summary.json + docs_index.json
-├── lib/                      tools.ts, embed.ts (pure encoder), rag.ts, agent.ts (tool loop), dataset.ts, providers.ts (Groq/Gemini/mock), guards.ts, observability.ts, langfuse.ts
 ├── app/                      Next.js app: /api/chat SSE route, /api/listings JSON+CSV route, atlas UI
-├── components/               atlas and chat UI components (DataTable.tsx backs the Data tab)
-├── tests/                    vitest: tools, agent, guards, cache route, listings route, providers, observability, rag, mcp, langfuse, eval scoring
-└── evals/                    48 golden cases + run.ts harness (npm run evals; report.json gitignored)
+├── components/               atlas and chat UI (DataTable.tsx backs the Data tab)
+├── lib/                      agent.ts, tools.ts, grounding.ts, deals.ts, sample.ts, mortgage.ts, providers.ts, guards.ts, observability.ts, langfuse.ts
+├── mcp/                      MCP stdio server reusing TOOL_SPECS (read-only)
+├── pipeline/                 Python data build and hmb-v1 valuation; stdlib unittest coverage
+├── data/                     generated listings.json + market_summary.json
+├── scripts/                  canada_refresh.sh (scheduled refresh), build_geography.py
+├── evals/                    58 golden cases + run.ts harness (report.json gitignored)
+├── tests/                    vitest suites
+└── docs/                     STATUS, PLAN, DATA, DEMO
 ```
 
 ## Documentation
@@ -209,22 +211,21 @@ canadian-housing-agent/
 
 ## Disclaimers
 
-- The dataset is a research sample of public for-sale listing data (Zillow).
-  It includes each listing's address and a link to the source listing; listing
-  ids, agent names, and scraped source pages are not published. Not affiliated
-  with Zillow.
-- Asking prices only; no sold prices. Square footage covers 57.5% of rows and is
-  city-skewed (near complete in Calgary, Surrey, and Vancouver; about 1.5% in
-  Toronto and nearly none in Ottawa); values outside a plausible 200-20,000 sqft
-  range (for example, land listings whose acreage the source renders as interior
-  square feet) are treated as missing. The sample is a single snapshot and can be
-  stale.
+- The dataset is a research sample of public for-sale listing data from
+  Zillow, collected with Zillow's permission. It includes each listing's
+  address and a link to the source listing; listing ids, agent names, and
+  scraped source pages are not published. Not affiliated with or endorsed by
+  Zillow.
+- Asking prices only; no sold prices. Square footage covers 57.5% of rows and
+  is city-skewed; values outside a plausible 200-20,000 sqft range are treated
+  as missing. The sample is a single snapshot and can be stale.
+- Coverage is uneven: Ontario and British Columbia dominate, and Quebec and
+  Manitoba have few listings.
 - `estValue`/`discountPct` estimate the typical asking price from comparable
-  asking prices — not an appraisal, not sold prices, not investment advice. They
-  use no property type, condition, lot, or sold data and are null for listings in
-  cities with fewer than 30 rows. Estimates typically err by about ±19%, shown
-  per city in the UI; deal lists only show discounts between 20% and 60%, and
-  bigger gaps are treated as model artefacts, not deals.
+  asking prices: not an appraisal, not sold prices, not investment advice. They
+  use no property type, condition, lot, or sold data, so a large gap can be a
+  condo or mobile home compared with houses. Estimates typically err by about
+  ±19% overall, shown per city in the UI.
 - Nothing here is financial, legal, or real-estate advice.
 - The demo runs on free tiers: Groq for the model and Vercel Hobby for hosting.
   Exhausting the daily free-tier token quota can make it unavailable during
@@ -233,5 +234,4 @@ canadian-housing-agent/
 ## License
 
 PolyForm Noncommercial 1.0.0: free for personal, research, and other
-noncommercial use; commercial use requires permission. This is a research
-project built on a sample of public listing data. See [LICENSE](LICENSE).
+noncommercial use; commercial use requires permission. See [LICENSE](LICENSE).

@@ -15,27 +15,21 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   3.11. Single test: add `-k <pattern>` (e.g. `-p test_build_dataset.py -k dedupe`).
 - `python3 pipeline/build_dataset.py`: rebuilds `data/listings.json` + `data/market_summary.json` from the sibling
   scrape tree; `--source <dir>` and `--out <dir>` point elsewhere. Overwrites tracked data, so only run it to refresh.
-- `npm run embed:docs`: regenerates `data/docs_index.json` (deterministic, byte-identical) from README.md +
-  docs/{DATA,DEMO,PLAN}.md; it imports only the pure encoder (`lib/embed.ts`), so it also works when the index is
-  missing. The index is tracked like `data/listings.json`: regenerate after editing any source doc and commit it
-  with those changes. `lib/rag.ts` imports the index, so `npm test` / `npm run build` need it to exist.
 - `npm run mcp`: MCP stdio server (`tsx mcp/server.ts`). npm's script banner goes to stdout, so MCP clients should
   spawn `npx --yes tsx <absolute-repo-path>/mcp/server.ts` (cwd-independent); stdout is protocol-only, diagnostics
   go to stderr. Read-only tools, no model calls.
-- `npm run seed:pgvector [-- --query "<text>"]`: optional local pgvector demo (`docker compose up -d` first;
-  `DATABASE_URL` defaults to `postgres://postgres:postgres@localhost:5432/agent`). Not used at runtime; the success
-  path is unverified here (Docker not installed), but failing without Postgres is clean (exit 1).
 - `npm run evals`: live, loads `.env.local` with Node 24, needs `GROQ_API_KEY`, sequential with `EVAL_DELAY_MS` default 2500.
-  `MOCK_LLM=1 npm run evals`: plumbing only, no network, exit 0. Flags: `--category`, `--limit`, `--ids T01,D01`, `--mock`. Live
-  runs retry a case up to twice (45s wait) when the provider returns an error, so rate limits are not scored as
-  model failures. Writes `evals/report.json` (gitignored). 53 golden cases (23 tool choice including multi-turn
-  MT01-MT04, capability cases C01/C02, deal tool-choice D01, docs tool-choice T14, and mortgage tool-choice
-  M01/M02; 16 numeric including deal cases ND01/ND02 and mortgage MN01/MN02; 14 refusals including R14); live bars: tool
-  0.9, numeric 0.95, refusal 1.0; mock scores are not a quality signal. Partial runs cannot satisfy the full
-  quality gate. Multi-turn cases run 2-3 user turns, score only the final turn, and require a tool on the first
-  turn; expectations may list `anyOf` alternatives; the report is rewritten after each case, so an aborted run keeps
-  partial results. Last completed full-suite pass: the 32-case gate (2026-09-16); the 53-case suite has not
-  completed a live run.
+  `MOCK_LLM=1 npm run evals`: plumbing only, no network, exit 0. Flags: `--category`, `--limit`, `--ids T01,D01`, `--mock`,
+  `--resume` (keep completed rows from the last live report for the same model, run the rest). `GROQ_MODEL=<id>`
+  runs the suite on another model; the report records `model`. Live runs retry a case up to twice (45s wait) when the
+  provider returns an error, so rate limits are not scored as model failures. Writes `evals/report.json` (gitignored)
+  after every case. 58 golden cases (27 tool choice including multi-turn MT01-MT04 and H04, capability cases
+  C01/C02, deal D01, mortgage M01/M02, hard cases H01-H03/H06; 17 numeric including deal ND01/ND02, mortgage
+  MN01/MN02 and thin-sample H05; 14 refusals); live bars: tool 0.9, numeric 0.95, refusal 1.0, plus a reported (not
+  gated) `grounding_rate`. Mock scores are not a quality signal. Only a live report covering every case can pass the
+  gate. Multi-turn cases score the final turn and require a tool on the first; `anyOf` lists alternatives; a
+  `refusal`-type check doubles as a required-phrase check in non-refusal cases (H05, H06). Last completed
+  full-suite pass: the 32-case gate (2026-09-16); the 58-case suite has not completed a live run.
 
 ## Environment
 
@@ -46,9 +40,9 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   Groq fails before emitting.
 - Langfuse tracing is optional: set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` (+ optional `LANGFUSE_BASE_URL`)
   to enable metadata-only traces (turn duration/cache/tool names/error code; per-tool durations). Without both keys
-  it is a full no-op. `DATABASE_URL` (optional) is read only by `npm run seed:pgvector`.
-- CI (`.github/workflows/ci.yml`): `npm ci`, docs-index freshness (`npm run embed:docs && git diff --exit-code --
-  data/docs_index.json`), `MOCK_LLM=1` vitest, `npm run build`, python unittest: Node 24 / Python 3.11. Evals are
+  it is a full no-op.
+- CI (`.github/workflows/ci.yml`): `npm ci`, `MOCK_LLM=1` vitest, `npm run build`, python unittest: Node 24 /
+  Python 3.11. Evals are
   intentionally not in CI.
 
 ## Invariants
@@ -56,23 +50,27 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
 - `lib/tools.ts` is the single source of truth for tool schemas (`TOOL_SPECS`), implementations (`TOOL_IMPLS`),
   stats, and city alias normalization (`"St. Catharines"` -> `st-catharines`). Keep it deterministic, synchronous,
   free of LLM/network imports.
-- `lib/embed.ts` is the pure deterministic encoder (`hash-v1`, 256 dims, FNV-1a over word unigrams + char 4-grams,
-  L2-normalized) with no index import, so scripts can use it on a fresh checkout. `lib/rag.ts` adds the generated
-  index (`data/docs_index.json`, 84 chunks today; each chunk is embedded as heading + text, the stored text is
-  unchanged) and cosine search, and re-exports the encoder. Both are synchronous, keyless, and free of network/LLM
-  imports. The index is generated by `npm run embed:docs`; never hand-edit it, and commit it with doc edits (CI
-  checks freshness). `search_docs` wraps it; blank queries return no results and `limit` clamps to 1-10.
-- `mcp/server.ts` reuses `TOOL_SPECS`/`TOOL_IMPLS` verbatim (schemas passed through; currently all seven tools,
-  including `search_docs`) and exposes only deterministic lookups. Keep it transport-only: no model calls, no side
+- `lib/grounding.ts` is pure: it extracts money, percent and plain-count (100+, not bare years) figures from an
+  answer, strips URLs first, and matches each against the turn's tool results and the conversation text with a
+  tolerance of max(1%, half a unit of the quoted precision). Address digits may ground plain numbers only. The agent
+  emits `{type:"grounding",checked,ungrounded}` before `done`; the chat route recomputes it on cache replays. Any
+  figure the prompt or a tool description tells the model to state must appear in the tool result (for example
+  `gdsLimitPct`, `noiseFloorPct`, `thinSampleThreshold`), or the check will flag it.
+- `lib/deals.ts` and `lib/sample.ts` hold the deal window (floor = max(dataset threshold, ceil(2 x city MdAPE)), cap
+  50%) and the small-sample thresholds (100 for a caveat, 30 for a map label). They import no data, so client
+  components use them too.
+- `mcp/server.ts` reuses `TOOL_SPECS`/`TOOL_IMPLS` verbatim (schemas passed through; currently all six tools)
+  and exposes only deterministic lookups. Keep it transport-only: no model calls, no side
   effects.
 - Tool surface behavior: `city_snapshot` accepts optional `minPrice`/`maxPrice`/`beds`/`bathsMin` and computes stats
   over the matching rows (`null` when nothing matches). `rank_areas` ranks a city's FSAs by `median_price` or `count`,
   keeps only areas with 5 or more matching listings, defaults to 5 rows (max 10), and returns `considered` (matching
   listings with an FSA) and `totalAreas` (areas that cleared the threshold). `search_listings` filters price, exact
   beds, and FSA but not bathrooms; `rank_areas` and filtered snapshots do. `find_deals` lists a city's listings
-  asking below the hmb-v1 estimate: optional `minDiscount` (default from the valuation metadata, fallback 15, clamped
-  0-60), `minPrice`/`maxPrice`, exact `beds`, and `limit` 1-25 (default 5); the result
-  `{city,minDiscount,considered,totalMatches,returned,listings}` is sorted by `discountPct` desc, and rows without a
+  asking below the hmb-v1 estimate: optional `minDiscount` (default the city's noise floor from `lib/deals.ts`;
+  an explicit value is honoured, clamped 0-50, with a `note` when below the floor), `minPrice`/`maxPrice`, exact
+  `beds`, and `limit` 1-25 (default 5); the result `{city,minDiscount,considered,totalMatches,returned,listings,
+  typicalErrorPct,noiseFloorPct,maxDiscountPct,note?}` is sorted by `discountPct` desc, and rows without a
   usable estimate or below the $100,000 deal floor are excluded from `considered`; `null` for an unknown city.
 - `lib/mortgage.ts` is pure arithmetic with no network or LLM imports, shared by the `mortgage_estimate` tool and the
   city tray. Canadian rules live there: 5/10/20% minimum down tiers, no insured mortgage above $1.5m, CMHC premium
@@ -121,7 +119,7 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   grouped fold assignment): a hierarchical median-residual model on `ln(price)` whose published estimates are 5-fold
   out-of-fold predictions plus
   one median bias correction; only cities with 30+ rows are estimated, and `min_discount_pct` is measured at build
-  time (max(15, ceil(OOF MdAPE/5)*5), capped 60). `market_summary.valuation` carries the overall `oof_mdape_pct`, the
+  time (max(15, ceil(OOF MdAPE/5)*5), capped 50). `market_summary.valuation` carries the overall `oof_mdape_pct`, the
   per-city `oof_mdape_pct_by_city` map (shown in the UI as each city's typical error), and `min_discount_pct`, which
   `find_deals` and `/api/listings` read at runtime. `build_dataset.py` runs it in the same refresh: no extra step,
   dependency, or network call.
@@ -136,7 +134,7 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   URL params (see `filtersFromParams` in `components/DataTable.tsx`). JSON `{total, returned, offset, nextOffset, listings}`
   with optional `city`, `province` (two-letter code), `fsa`, `beds` (exact), `minPrice`/`maxPrice`, `q` (free text over
   address, city and FSA), `sort` (`price_asc` default, `price_desc`, `newest` by `seen`, or `discount`, which uses
-  `minDiscount` defaulting to the valuation meta threshold and clamped 0-60), `limit` (default 100, capped at 200) and
+  `minDiscount` defaulting to the valuation meta threshold, clamped 0-50, and raised per row to that city's noise floor), `limit` (default 100, capped at 200) and
   `offset`. Invalid filter values are ignored, not errors. `parseFilters` and `queryListings` are the pure core. Or
   `?format=csv` returning all rows with the header
   `city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct` (`null` -> empty cell; RFC 4180

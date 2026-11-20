@@ -1,3 +1,50 @@
+# Project status: 2026-11-20 (grounding check, deal noise floor, small samples)
+
+## What changed
+
+- Runtime grounding: `lib/grounding.ts` checks every final answer's money,
+  percent and count figures against the turn's tool results and the
+  conversation. The agent emits a `grounding` event, the chat shows "All N
+  figures match the tool results below" or names the untraced figures, the
+  `chat_turn` log carries the counts, and the eval report adds
+  `grounding_rate`. The extraction code moved here from `evals/run.ts`.
+- `find_deals` default floor is now max(dataset threshold, 2 x the city's
+  out-of-fold MdAPE) and the cap is 50% (was 60%). Hamilton: 425 deals under
+  the old flat 20% floor, 69 now. Cities whose floor exceeds the cap return no
+  deals with a note. The Data tab, chat cards and `/api/listings` apply the
+  same per-city floor (`lib/deals.ts`).
+- Small samples: `city_snapshot` flags `thinSample` under 100 listings; the
+  map hides price labels under 30 listings (Winnipeg had a $282k headline from
+  2 listings) and dashes thin ones; the city list and tray say "small sample".
+- Removed `search_docs`, its hash-encoder index, the pgvector seed demo and the
+  CI index-freshness step that kept CI red.
+- Evals: 58 cases (six hard cases added: misspelled cities, a two-tool
+  question, an elliptical follow-up, a thin-sample caveat, a too-noisy deal
+  city). `--resume` continues a live run across the Groq daily cap; reports
+  record the model id.
+- Mobile accessibility 91 -> 100 (nav contrast, wordmark name, 24px map pins).
+
+## Verified (2026-11-20, Windows, Node 24)
+
+- `npx vitest run`: 245 passed. `npx tsc --noEmit`: clean.
+  `python -m unittest discover -s pipeline/tests`: 36 passed (one test was
+  failing on Windows path separators; fixed).
+- `npm run build`: passes. Local `MOCK_LLM=1 next start`: Hamilton deals
+  answer shows 69 deals and "All 3 figures match"; Winnipeg answer is marked
+  small sample; Montreal tray and label show the caveat at 1440px and 390px.
+- Lighthouse mobile on the local build: accessibility 100, best practices 100,
+  SEO 100; CLS 0.075 (inside the 0.1 "good" range).
+- `MOCK_LLM=1 npm run evals`: plumbing only, grounding_rate 1.0.
+
+## Not done
+
+- No live eval run: needs `GROQ_API_KEY` in `.env.local`, then
+  `npm run evals` and `npm run evals -- --resume` until all 58 cases are in.
+- Property type is not in the dataset, so the estimate still compares condos
+  with houses; the surviving top deals cluster just under the 50% cap. The
+  scraper already captures Zillow's `homeType`; carrying it through the
+  pipeline and valuation needs the national raw CSVs.
+
 # Project status: 2026-10-30 (polish pass: national listings, mortgage tool, motion)
 
 ## What changed

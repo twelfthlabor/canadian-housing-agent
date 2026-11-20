@@ -50,8 +50,9 @@ The questions run about 100 seconds. Then show the affordances:
 - Asking prices only. No sold prices, transaction history, or MLS numbers.
 - The comparable-listings estimate is a typical-asking-price heuristic from this
   sample (median error about 19%, shown per city in the UI), not an appraisal or
-  a prediction. Deal surfaces show discounts only in the 20-60% window; larger
-  discounts are treated as model artefacts.
+  a prediction. A listing is only called a deal when its discount is at least
+  twice the city's typical estimate error and at most 50%; larger discounts are
+  treated as model artefacts.
 - No investment, legal, or financial advice, and no predictions.
 - A single snapshot: numbers can be stale, and duplicate rows and sparse square
   footage can skew comparisons.
