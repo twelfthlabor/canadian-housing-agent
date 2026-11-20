@@ -417,7 +417,7 @@ describe("eval case parsing", () => {
 
   it("parses every shipped case, including the multi-turn and capability additions", () => {
     const cases = loadCases();
-    expect(cases).toHaveLength(53);
+    expect(cases).toHaveLength(52);
     expect(cases.filter((c) => c.turns).map((c) => c.id)).toEqual(["MT01", "MT02", "MT03", "MT04"]);
     expect(cases.find((c) => c.id === "C01")?.expect).toEqual({
       tool: "city_snapshot",

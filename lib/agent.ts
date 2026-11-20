@@ -21,7 +21,6 @@ export const SYSTEM_PROMPT = [
   "- Some tools return estValue and discountPct: an offline estimate of the typical asking price for similar listings in the same area, from this sample's asking prices. It is not an appraisal, a sold price, or a prediction; describe a listing below it as \"below the comparable-listings estimate\".",
   "- Use find_deals for undervalued, bargain, or deal questions, and quote discountPct exactly as the tool returns it. When the question names a city, call find_deals for that city straight away; beds and price are optional filters, so never ask for them first.",
   "- Use mortgage_estimate for payment, down-payment, CMHC, or stress-test questions. Only pass a rate the user gave or accepts; say that it is illustrative, not a mortgage offer.",
-  "- For any question about how this project, its data pipeline, or the hmb-v1 model itself works, always call search_docs before answering; listing statistics still use the data tools.",
   "- If a question you can answer is missing a detail the tools need (for example the city), do not decline or guess: ask one brief question for it first, then continue once you have it.",
   "- When you decline a request, name the specific limitation in one line; never answer with only a generic \"I can't help with that\".",
   "- No predictions, no investment, legal, or financial advice. For buy, sell, or timing questions, decline in one line and do not say the user should buy, invest, or wait.",
@@ -129,10 +128,6 @@ function summarizeResult(name: string, result: unknown): string {
     return JSON.stringify(result).slice(0, 120);
   }
   const record = result as Record<string, unknown>;
-  if (name === "search_docs" && typeof record.query === "string") {
-    const passages = Array.isArray(record.results) ? record.results : [];
-    return `Retrieved ${passages.length} passage(s) for "${record.query}"`;
-  }
   if (name === "search_listings") {
     const total = Number(record.totalMatches ?? 0);
     const listings = Array.isArray(record.listings)

@@ -744,7 +744,7 @@ describe("province filter", () => {
 });
 
 describe("tool specs and implementations", () => {
-  it("exposes the seven OpenAI-style specs", () => {
+  it("exposes the six OpenAI-style specs", () => {
     const names = TOOL_SPECS.map((spec) => spec.function.name);
     expect(names).toEqual([
       "search_listings",
@@ -752,7 +752,6 @@ describe("tool specs and implementations", () => {
       "rank_areas",
       "compare_cities",
       "find_deals",
-      "search_docs",
       "mortgage_estimate",
     ]);
     for (const spec of TOOL_SPECS) {

@@ -1,6 +1,5 @@
 import { listings, summary } from "./dataset";
 import { MIN_PRICE, MortgageError, computeMortgage, maxPriceForIncome } from "./mortgage";
-import { retrieveDocs } from "./rag";
 import type {
   AreaRank,
   CitySnapshot,
@@ -616,34 +615,6 @@ export const TOOL_SPECS = [
   {
     type: "function",
     function: {
-      name: "search_docs",
-      description:
-        `Search the project's own documentation (README.md, docs/DATA.md, docs/DEMO.md, docs/PLAN.md) for how this project, its data pipeline, and the hmb-v1 estimate work. ` +
-        `Use this for questions about the project or model itself; statistics questions still use the data tools. ` +
-        `Returns the matching passages with their source file and section heading, most similar first. ` +
-        `Use this tool for project mechanics; never invent numbers.`,
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: 'Natural-language question about the project or its documentation (for example "how does the hmb-v1 estimate work?").',
-          },
-          limit: {
-            type: "integer",
-            minimum: 1,
-            maximum: 10,
-            description: "Maximum passages to return. Defaults to 5, capped at 10.",
-          },
-        },
-        required: ["query"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "mortgage_estimate",
       description:
         "Illustrative Canadian mortgage math. With a price: minimum down payment under the federal rules, the CMHC insurance premium when down payment is under 20%, the monthly payment at the contract rate (semi-annual compounding), total interest over the amortization, the OSFI stress-test rate (the greater of contract rate plus 2% and 5.25%) with its payment, and the annual income needed to keep housing costs within the 39% GDS limit (property tax assumed at 1% of price and heat at $150 per month). With a householdIncome: the highest affordable price on those terms. " +
@@ -768,10 +739,5 @@ export const TOOL_IMPLS: Record<string, (args: any) => unknown> = {
       if (error instanceof MortgageError) return { error: error.message };
       throw error;
     }
-  },
-  search_docs: (args: any) => {
-    const query = asString(args?.query);
-    const results = retrieveDocs(query, asNumber(args?.limit));
-    return { query, returned: results.length, results };
   },
 };
