@@ -109,10 +109,14 @@ describe("/api/chat observability", () => {
     expect(turns[0].cached).toBe(false);
     expect(turns[0].tools).toEqual(["search_listings"]);
     expect(turns[0].errorCode).toBeUndefined();
+    expect(turns[0].figuresUngrounded).toBe(0);
+    expect(turns[0].figuresChecked).toBeTypeOf("number");
     expect(Object.keys(turns[0]).sort()).toEqual([
       "cached",
       "durationMs",
       "event",
+      "figuresChecked",
+      "figuresUngrounded",
       "tools",
       "ts",
     ]);

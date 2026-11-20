@@ -58,6 +58,19 @@ describe("completed, standalone answer caching", () => {
     expect(text?.delta).toContain("matching listings");
   });
 
+  it("sends the same grounding result live and on a cache replay, after the text", async () => {
+    const search = [{ role: "user", content: "How many 3 bedroom listings are in Ottawa?" }];
+    const first = frames(await (await POST(request(search))).text());
+    const replay = frames(await (await POST(request(search))).text());
+    const live = first.find((frame) => frame.type === "grounding");
+    expect(live).toBeDefined();
+    expect(live?.ungrounded).toEqual([]);
+    expect(replay.find((frame) => frame.type === "grounding")).toEqual(live);
+    const types = replay.map((frame) => frame.type);
+    expect(types.indexOf("text")).toBeLessThan(types.indexOf("grounding"));
+    expect(types.indexOf("grounding")).toBeLessThan(types.indexOf("done"));
+  });
+
   it("does not reuse or store answers from conversations with history", async () => {
     const conversation = [
       { role: "user", content: "Tell me about Ottawa." },

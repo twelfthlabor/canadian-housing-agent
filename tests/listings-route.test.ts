@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { csvCell, csvDocument, csvRow, parseFilters, parseLimit, parseMinDiscount, queryListings, GET } from "../app/api/listings/route";
 import { listings, summary } from "../lib/dataset";
-import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, defaultMinDiscountPct } from "../lib/tools";
+import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, cityDealFloorPct, defaultMinDiscountPct } from "../lib/tools";
 import type { Listing } from "../lib/types";
 
 const listing: Listing = {
@@ -44,11 +44,11 @@ describe("parseMinDiscount", () => {
     for (const value of [null, "", "abc"]) expect(parseMinDiscount(value)).toBe(defaultMinDiscountPct());
   });
 
-  it("clamps to [0, 60] and keeps in-range fractions", () => {
+  it("clamps to [0, MAX_DISCOUNT_PCT] and keeps in-range fractions", () => {
     expect(parseMinDiscount("-5")).toBe(0);
     expect(parseMinDiscount("0")).toBe(0);
     expect(parseMinDiscount("999")).toBe(MAX_DISCOUNT_PCT);
-    expect(parseMinDiscount("60")).toBe(60);
+    expect(parseMinDiscount(String(MAX_DISCOUNT_PCT))).toBe(MAX_DISCOUNT_PCT);
     expect(parseMinDiscount("15.5")).toBe(15.5);
   });
 });
@@ -113,7 +113,7 @@ describe("csvRow / csvDocument", () => {
   });
 });
 
-/** Independent recomputation of the route's sort=discount rules from the raw dataset. */
+/** Independent recomputation of the route's sort=discount rules: each city keeps its own noise floor. */
 function expectedDeals(city: string, minDiscount = defaultMinDiscountPct()): Listing[] {
   return listings
     .filter(
@@ -122,7 +122,7 @@ function expectedDeals(city: string, minDiscount = defaultMinDiscountPct()): Lis
         row.estValue !== null &&
         row.discountPct !== null &&
         row.price >= DEAL_MIN_PRICE &&
-        row.discountPct >= minDiscount &&
+        row.discountPct >= Math.max(minDiscount, cityDealFloorPct(row.city)) &&
         row.discountPct <= MAX_DISCOUNT_PCT,
     )
     .sort(
@@ -136,7 +136,7 @@ function expectedDeals(city: string, minDiscount = defaultMinDiscountPct()): Lis
 const dealCounts = new Map<string, number>();
 for (const row of listings) {
   if (row.estValue === null || row.discountPct === null || row.price < DEAL_MIN_PRICE) continue;
-  if (row.discountPct < defaultMinDiscountPct() || row.discountPct > MAX_DISCOUNT_PCT) continue;
+  if (row.discountPct < cityDealFloorPct(row.city) || row.discountPct > MAX_DISCOUNT_PCT) continue;
   dealCounts.set(row.city, (dealCounts.get(row.city) ?? 0) + 1);
 }
 const dealCity = [...dealCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
@@ -159,7 +159,8 @@ describe("/api/listings sort=discount", () => {
   it("sorts by discount descending with deterministic tie-breaks and keeps the JSON shape", async () => {
     const expected = expectedDeals(dealCity);
     expect(expected.length).toBeGreaterThan(0);
-    expect(listings.some((row) => row.city === dealCity && (row.discountPct ?? 0) > MAX_DISCOUNT_PCT)).toBe(true);
+    // The cap is live: some listings in the dataset sit above it and must never come back.
+    expect(listings.some((row) => (row.discountPct ?? 0) > MAX_DISCOUNT_PCT)).toBe(true);
 
     const body = await getJson(`city=${dealCity}&sort=discount&limit=25`);
     expect(Object.keys(body).sort()).toEqual(["listings", "nextOffset", "offset", "returned", "total"]);
@@ -184,7 +185,7 @@ describe("/api/listings sort=discount", () => {
     }
   });
 
-  it("clamps minDiscount to [0, 60] and never returns estimates above the cap", async () => {
+  it("clamps minDiscount to [0, MAX_DISCOUNT_PCT], keeps the city noise floor, and never returns estimates above the cap", async () => {
     const zero = await getJson(`city=${dealCity}&sort=discount&minDiscount=0&limit=25`);
     expect(zero.total).toBe(expectedDeals(dealCity, 0).length);
     expect(zero.total).toBeGreaterThanOrEqual((await getJson(`city=${dealCity}&sort=discount&limit=25`)).total);
@@ -220,9 +221,9 @@ describe("/api/listings sort=discount", () => {
 
 describe("national listings query", () => {
   const rows: Listing[] = [
-    { ...listing, city: "ajax", province: "ON", price: 900_000, beds: 3, seen: "2026-09-10", address: "2 A St", fsa: "L1Z", estValue: 1_000_000, discountPct: 10 },
+    { ...listing, city: "ajax", province: "ON", price: 900_000, beds: 3, seen: "2026-09-10", address: "2 A St", fsa: "L1Z", estValue: 1_000_000, discountPct: 30 },
     { ...listing, city: "calgary", province: "AB", price: 400_000, beds: 2, seen: "2026-09-12", address: "9 Crescent Rd", fsa: "T2A", estValue: 300_000, discountPct: -33 },
-    { ...listing, city: "toronto", province: "ON", price: 1_500_000, beds: 4, seen: "2026-09-14", address: "5 Bay St", fsa: "M5J", estValue: 1_200_000, discountPct: 25 },
+    { ...listing, city: "toronto", province: "ON", price: 1_500_000, beds: 4, seen: "2026-09-14", address: "5 Bay St", fsa: "M5J", estValue: 1_200_000, discountPct: 48 },
     { ...listing, city: "toronto", province: "ON", price: 700_000, beds: 2, seen: "2026-09-01", address: "7 Queen St", fsa: "M5V", estValue: null, discountPct: null },
   ];
   const run = (query: string) => queryListings(rows, parseFilters(new URLSearchParams(query)));
@@ -256,8 +257,14 @@ describe("national listings query", () => {
     expect(run("sort=newest").listings[0].seen).toBe("2026-09-14");
     expect(run("sort=price_desc").listings[0].price).toBe(1_500_000);
     const deals = run("sort=discount&minDiscount=5");
-    expect(deals.total).toBe(2);
-    expect(deals.listings.map(row => row.discountPct)).toEqual([25, 10]);
+    // Each row must clear its own city's noise floor; computed so a data refresh cannot break it.
+    const expected = rows
+      .filter(row => row.discountPct !== null && row.estValue !== null && row.price >= DEAL_MIN_PRICE &&
+        row.discountPct >= Math.max(5, cityDealFloorPct(row.city)) && row.discountPct <= MAX_DISCOUNT_PCT)
+      .map(row => row.discountPct)
+      .sort((a, b) => Number(b) - Number(a));
+    expect(deals.total).toBe(expected.length);
+    expect(deals.listings.map(row => row.discountPct)).toEqual(expected);
   });
 
   it("pages with offset and reports nextOffset through the route", async () => {

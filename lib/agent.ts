@@ -5,6 +5,7 @@
 
 import { TOOL_IMPLS, TOOL_SPECS } from "./tools";
 import { ProviderError } from "./providers";
+import { checkGrounding } from "./grounding";
 import type { ChatMessage, Provider, ToolSpec } from "./providers";
 
 export const MAX_LLM_CALLS_PER_TURN = 4;
@@ -16,12 +17,12 @@ export const SYSTEM_PROMPT = [
   "- ALWAYS call a tool for any price, count, ranking, or statistic. Never invent numbers.",
   "- Quote numbers as the tools return them. Do not derive new figures (averages, quartile percentages); if asked for something the tools do not compute, report the closest figure they do (for example the median) and name it.",
   "- If the tools do not return the data, say plainly that the sample does not cover it.",
+  "- When a result has thinSample: true, say the median rests on only that many listings (fewer than thinSampleThreshold) and is rough.",
   "- The sample has asking prices only: no sold prices, transaction history, or MLS numbers. Never ask for those.",
   "- Listing results include an address and source URL; include the full address and source URL when you mention a specific listing.",
   "- Some tools return estValue and discountPct: an offline estimate of the typical asking price for similar listings in the same area, from this sample's asking prices. It is not an appraisal, a sold price, or a prediction; describe a listing below it as \"below the comparable-listings estimate\".",
   "- Use find_deals for undervalued, bargain, or deal questions, and quote discountPct exactly as the tool returns it. When the question names a city, call find_deals for that city straight away; beds and price are optional filters, so never ask for them first.",
   "- Use mortgage_estimate for payment, down-payment, CMHC, or stress-test questions. Only pass a rate the user gave or accepts; say that it is illustrative, not a mortgage offer.",
-  "- For any question about how this project, its data pipeline, or the hmb-v1 model itself works, always call search_docs before answering; listing statistics still use the data tools.",
   "- If a question you can answer is missing a detail the tools need (for example the city), do not decline or guess: ask one brief question for it first, then continue once you have it.",
   "- When you decline a request, name the specific limitation in one line; never answer with only a generic \"I can't help with that\".",
   "- No predictions, no investment, legal, or financial advice. For buy, sell, or timing questions, decline in one line and do not say the user should buy, invest, or wait.",
@@ -43,6 +44,8 @@ export type AgentEvent =
   | { type: "tool"; name: string; args: Record<string, unknown> }
   | { type: "tool_result"; name: string; summary: string; data?: unknown }
   | { type: "cached" }
+  /** Figures in the final answer checked against this turn's tool results and the conversation. */
+  | { type: "grounding"; checked: number; ungrounded: string[] }
   | { type: "done" }
   | AgentErrorEvent;
 
@@ -129,10 +132,6 @@ function summarizeResult(name: string, result: unknown): string {
     return JSON.stringify(result).slice(0, 120);
   }
   const record = result as Record<string, unknown>;
-  if (name === "search_docs" && typeof record.query === "string") {
-    const passages = Array.isArray(record.results) ? record.results : [];
-    return `Retrieved ${passages.length} passage(s) for "${record.query}"`;
-  }
   if (name === "search_listings") {
     const total = Number(record.totalMatches ?? 0);
     const listings = Array.isArray(record.listings)
@@ -149,7 +148,7 @@ function summarizeResult(name: string, result: unknown): string {
   if (name === "city_snapshot" && typeof record.city === "string") {
     return `${record.city}: ${Number(record.count ?? 0).toLocaleString("en-CA")} listings, median ${formatMoney(
       record.medianPrice,
-    )}`;
+    )}${record.thinSample ? " (small sample)" : ""}`;
   }
   if (name === "find_deals" && typeof record.city === "string") {
     const total = Number(record.totalMatches ?? 0);
@@ -157,6 +156,7 @@ function summarizeResult(name: string, result: unknown): string {
     const deals = Array.isArray(record.listings)
       ? (record.listings as Array<Record<string, unknown>>)
       : [];
+    if (typeof record.note === "string" && (total === 0 || deals.length === 0)) return record.note;
     if (total === 0 || deals.length === 0) {
       return `no deals in ${record.city} at or above ${Number(record.minDiscount ?? 0)}% below estimate (${considered.toLocaleString(
         "en-CA",
@@ -208,6 +208,9 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
 
   let llmCalls = 0;
   let toolIterations = 0;
+  const toolResults: unknown[] = [];
+  // Everything the user sees this turn, including text written before a tool call.
+  let shownText = "";
 
   while (llmCalls < maxLlmCalls) {
     try {
@@ -224,6 +227,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
       for await (const event of options.provider.stream(messages, toolSpecs, options.signal)) {
         if (event.type === "text") {
           text += event.delta;
+          shownText += event.delta;
           yield { type: "text", delta: event.delta };
         } else {
           calls.push({ id: event.id, name: event.name, arguments: event.arguments });
@@ -239,6 +243,15 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
         yield {
           type: "text",
           delta: "I could not produce an answer for that. Try rephrasing the question.",
+        };
+      } else {
+        yield {
+          type: "grounding",
+          ...checkGrounding({
+            answer: shownText,
+            toolResults,
+            messages: options.messages.map((message) => message.content),
+          }),
         };
       }
       yield { type: "done" };
@@ -281,6 +294,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<AgentE
 
       yield { type: "tool", name: call.name, args };
       const result = executeTool(call.name, args);
+      toolResults.push(result);
       yield {
         type: "tool_result",
         name: call.name,

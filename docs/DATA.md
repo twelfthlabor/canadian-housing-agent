@@ -146,10 +146,14 @@ correction is applied.
   `valuation.oof_mdape_pct_by_city`; the UI shows the selected city's value as
   its typical error next to the estimates.
 - Deal threshold: `market_summary.valuation.params.min_discount_pct` is
-  `max(15, ceil(MdAPE/5)*5)` capped at 60, which is 20% today. `find_deals`,
-  the chat UI, and `/api/listings?sort=discount` read it at runtime; deal
-  surfaces show discounts only within [20, 60] — a larger discount is treated
-  as a model artefact and renders as `—` in the Data tab rather than as a deal.
+  `max(15, ceil(MdAPE/5)*5)` capped at 50, which is 20% today. At runtime each
+  city raises it to its noise floor, `ceil(2 x that city's MdAPE)`
+  (`lib/deals.ts`), so a deal has to clear twice the city's typical error:
+  Hamilton's floor is 40%, Toronto's 47%. Deals are capped at 50%; a larger
+  discount is usually a different property type or a data error and renders
+  as `—` in the Data tab. Where the floor is above the cap (23 cities with 50
+  or more estimated listings today, Montreal and Fredericton among them),
+  `find_deals` returns no deals and a note explaining why.
 - The refresh flow is unchanged: `python3 pipeline/build_dataset.py` runs the
   valuation in the same pass and writes the `valuation` block into
   `market_summary.json`.
@@ -198,9 +202,11 @@ a human clears it in the attach Chrome and the next run resumes the queue.
   with care.
 - **Estimates, not appraisals.** `estValue`/`discountPct` are computed from
   comparable asking prices only: no sold prices, property type, condition, lot,
-  or year-built data. Out-of-fold MdAPE is 19% on this snapshot, so the 20%
-  deal threshold is the model's noise margin, not evidence that a listing is
-  mispriced.
+  or year-built data. Out-of-fold MdAPE is 19% on this snapshot, so a 20%
+  gap is inside the model's noise; that is why deals need twice the city's
+  error. Without property type, a large gap can still be a condo, mobile home
+  or land lease compared with houses, so every deal should be checked against
+  its listing.
 - **Valuation coarseness.** Estimates are group medians; rows in cities with
   fewer than 30 listings get none (208 rows in 19 cities today), and small
   cities are valued from few comparables, so their estimates are coarse.
@@ -218,7 +224,8 @@ a human clears it in the attach Chrome and the next run resumes the queue.
 
 ## Terms and attribution
 
-- Research sample of public for-sale listing data collected from Zillow. Addresses
+- Research sample of public for-sale listing data collected from Zillow, with
+  Zillow's permission. Addresses
   and source links are published; listing ids, agent names, and scraped source
   pages are not.
 - Not affiliated with, endorsed by, or sponsored by Zillow.

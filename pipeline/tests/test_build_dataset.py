@@ -324,7 +324,7 @@ class PipelineEndToEnd(unittest.TestCase):
         self.assertEqual(valuation["oof_mdape_pct_top_cities"], {})
         self.assertEqual(valuation["oof_mdape_pct_by_city"], {})
         self.assertEqual(valuation["params"]["min_discount_pct"], 15)
-        self.assertEqual(valuation["params"]["max_discount_pct"], 60)
+        self.assertEqual(valuation["params"]["max_discount_pct"], 50)
         self.assertEqual(valuation["params"]["deal_min_price"], 100000)
         self.assertEqual(valuation["params"]["folds"], 5)
         self.assertEqual(valuation["params"]["min_city_rows"], 30)
@@ -474,7 +474,7 @@ class PureHelpers(unittest.TestCase):
     def test_default_source_is_relative(self):
         self.assertFalse(MODULE.DEFAULT_SOURCE.is_absolute())
         self.assertNotIn("/Users/", str(MODULE.DEFAULT_SOURCE))
-        self.assertEqual(str(MODULE.DEFAULT_SOURCE), "../property-scraper/data/regions")
+        self.assertEqual(MODULE.DEFAULT_SOURCE.as_posix(), "../property-scraper/data/regions")
 
 
 if __name__ == "__main__":

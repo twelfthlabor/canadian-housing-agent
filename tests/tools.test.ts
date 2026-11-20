@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  cityDealFloorPct,
   citySnapshot,
+  cityTypicalErrorPct,
   compareCities,
   DEAL_MIN_PRICE,
   defaultMinDiscountPct,
@@ -27,14 +29,13 @@ function hasUsableEstimate(row: Listing): boolean {
   return typeof row.estValue === "number" && typeof row.discountPct === "number";
 }
 
-const dealDefaultPct = defaultMinDiscountPct();
 /** Deterministic, data-derived city with the most rows that clear the default deal rules. */
 const dealCity = (() => {
   const counts = new Map<string, number>();
   for (const row of listings) {
     if (!hasUsableEstimate(row) || row.price < DEAL_MIN_PRICE) continue;
     const discount = row.discountPct as number;
-    if (discount < dealDefaultPct || discount > MAX_DISCOUNT_PCT) continue;
+    if (discount < cityDealFloorPct(row.city) || discount > MAX_DISCOUNT_PCT) continue;
     counts.set(row.city, (counts.get(row.city) ?? 0) + 1);
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
@@ -233,8 +234,22 @@ describe("citySnapshot", () => {
 
   it("computes stats at runtime that match market_summary.json for every city", () => {
     for (const city of cities) {
-      expect(citySnapshot(city)).toEqual({ city, ...summary.cities[city] });
+      const entry = summary.cities[city];
+      const flag = entry.count < 100 ? { thinSample: true, thinSampleThreshold: 100 } : {};
+      expect(citySnapshot(city)).toEqual({ city, ...entry, ...flag });
     }
+  });
+
+  it("flags small samples and leaves large ones unchanged", () => {
+    // Cities are picked from the data so a refresh cannot invalidate the test.
+    const thinCity = cities.find((city) => summary.cities[city].count < 100) as string;
+    expect(thinCity).toBeDefined();
+    expect(citySnapshot(thinCity)).toMatchObject({ count: summary.cities[thinCity].count, thinSample: true, thinSampleThreshold: 100 });
+    expect(summary.cities[topCity].count).toBeGreaterThanOrEqual(100);
+    expect(citySnapshot(topCity)?.thinSample).toBeUndefined();
+    // A filtered slice of a large city can be thin too.
+    const slice = citySnapshot({ city: topCity, beds: 5, minPrice: 3_000_000 });
+    if (slice) expect(slice.thinSample).toBe(slice.count < 100 ? true : undefined);
   });
 
   it("cross-checks the major city against its market_summary entry", () => {
@@ -560,7 +575,6 @@ describe("rankAreas", () => {
 describe("findDeals", () => {
   const hasEstimate = hasUsableEstimate;
   const discountOf = (row: Listing): number => row.discountPct as number;
-  const dealDefault = dealDefaultPct;
 
   const capCity = [...new Set(listings.map((row) => row.city))].find(
     (city) =>
@@ -622,12 +636,16 @@ describe("findDeals", () => {
     expect(empty?.listings).toEqual([]);
   });
 
-  it("defaults minDiscount to the market_summary valuation metadata and clamps to [0, 60]", () => {
+  it("defaults minDiscount to the city's noise floor and clamps explicit values to [0, MAX_DISCOUNT_PCT]", () => {
     const meta = summary.valuation?.params.min_discount_pct;
     expect(typeof meta).toBe("number");
     expect(defaultMinDiscountPct()).toBe(meta ?? 15);
 
-    expect(findDeals({ city: dealCity })?.minDiscount).toBe(meta);
+    const floor = cityDealFloorPct(dealCity);
+    expect(floor).toBe(Math.max(meta as number, Math.ceil(2 * (cityTypicalErrorPct(dealCity) as number))));
+    expect(findDeals({ city: dealCity })?.minDiscount).toBe(floor);
+    expect(findDeals({ city: dealCity })).toMatchObject({ noiseFloorPct: floor, maxDiscountPct: MAX_DISCOUNT_PCT });
+    expect(findDeals({ city: dealCity })?.note).toBeUndefined();
     expect(findDeals({ city: dealCity, minDiscount: -10 })?.minDiscount).toBe(0);
     expect(findDeals({ city: dealCity, minDiscount: 0 })?.minDiscount).toBe(0);
     expect(findDeals({ city: dealCity, minDiscount: 999 })?.minDiscount).toBe(MAX_DISCOUNT_PCT);
@@ -670,8 +688,34 @@ describe("findDeals", () => {
     }
   });
 
+  it("warns when an explicit threshold is below the city's noise floor", () => {
+    const result = findDeals({ city: dealCity, minDiscount: 10 });
+    expect(result?.minDiscount).toBe(10);
+    expect(result?.note).toContain(`noise floor of ${cityDealFloorPct(dealCity)}%`);
+  });
+
+  it("returns no deals, with a reason, where twice the typical error exceeds the cap", () => {
+    const noisy = knownCities().find((city) => cityDealFloorPct(city) > MAX_DISCOUNT_PCT && findDeals({ city })!.considered > 0);
+    expect(noisy).toBeDefined();
+    const result = findDeals({ city: noisy as string });
+    expect(result).toMatchObject({ totalMatches: 0, returned: 0, listings: [] });
+    expect(result?.note).toContain("no discount");
+    expect(result?.note).toContain(`${MAX_DISCOUNT_PCT}%`);
+  });
+
+  it("calls fewer deals at the noise floor than a flat 20% threshold would", () => {
+    // The city with the most flat-threshold matches, picked from the data.
+    const knownWithEstimates = knownCities().filter((city) => findDeals({ city })!.considered > 0);
+    const busiest = knownWithEstimates.reduce((best, city) =>
+      expectedMatches(city, 20).length > expectedMatches(best, 20).length ? city : best);
+    const floor = cityDealFloorPct(busiest);
+    const result = findDeals({ city: busiest });
+    expect(result?.totalMatches).toBe(floor > MAX_DISCOUNT_PCT ? 0 : expectedMatches(busiest, floor).length);
+    if (floor > 20) expect(result?.totalMatches as number).toBeLessThan(expectedMatches(busiest, 20).length);
+  });
+
   it("sorts discount descending then price then address, and returns copies with all 12 fields", () => {
-    const expected = expectedMatches(dealCity, dealDefault);
+    const expected = expectedMatches(dealCity, cityDealFloorPct(dealCity));
     expect(expected.length).toBeGreaterThan(0);
 
     const result = findDeals({ city: dealCity, limit: 25 });
@@ -744,7 +788,7 @@ describe("province filter", () => {
 });
 
 describe("tool specs and implementations", () => {
-  it("exposes the seven OpenAI-style specs", () => {
+  it("exposes the six OpenAI-style specs", () => {
     const names = TOOL_SPECS.map((spec) => spec.function.name);
     expect(names).toEqual([
       "search_listings",
@@ -752,7 +796,6 @@ describe("tool specs and implementations", () => {
       "rank_areas",
       "compare_cities",
       "find_deals",
-      "search_docs",
       "mortgage_estimate",
     ]);
     for (const spec of TOOL_SPECS) {

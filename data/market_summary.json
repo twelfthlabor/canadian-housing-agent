@@ -1986,7 +1986,7 @@
       "sqft_min_samples": 50,
       "sqft_min_coverage": 0.4,
       "min_discount_pct": 20,
-      "max_discount_pct": 60,
+      "max_discount_pct": 50,
       "deal_min_price": 100000
     },
     "coverage_pct": 99.6,

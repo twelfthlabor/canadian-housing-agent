@@ -13,6 +13,7 @@ import {
   takeRateLimit,
 } from "@/lib/guards";
 import type { CachedDisplayEvent } from "@/lib/guards";
+import { checkGrounding } from "@/lib/grounding";
 import { traceChatTurn } from "@/lib/langfuse";
 import { logEvent } from "@/lib/observability";
 import { getProvider } from "@/lib/providers";
@@ -128,6 +129,8 @@ export async function POST(request: NextRequest) {
       let completed = false;
       let failed = false;
       let errorCode: AgentErrorCode | undefined;
+      let figuresChecked: number | undefined;
+      let figuresUngrounded: number | undefined;
       // Replayed on a cache hit so the UI keeps cards, the "Based on N" line, and tool chips.
       const displayEvents: CachedDisplayEvent[] = [];
       try {
@@ -135,6 +138,15 @@ export async function POST(request: NextRequest) {
           send({ type: "cached" });
           for (const event of cached.events) send(event);
           send({ type: "text", delta: cached.answer });
+          // Recomputed from the stored tool results, so entries cached before this event existed still get it.
+          const replayed = checkGrounding({
+            answer: cached.answer,
+            toolResults: cached.events.flatMap((event) => (event.type === "tool_result" ? [event.data] : [])),
+            messages: [question],
+          });
+          figuresChecked = replayed.checked;
+          figuresUngrounded = replayed.ungrounded.length;
+          send({ type: "grounding", ...replayed });
           send({ type: "done" });
         } else {
           for await (const event of runAgent({
@@ -157,6 +169,10 @@ export async function POST(request: NextRequest) {
             }
             if (event.type === "tool" || event.type === "tool_result") displayEvents.push(event);
             if (event.type === "done") completed = true;
+            if (event.type === "grounding") {
+              figuresChecked = event.checked;
+              figuresUngrounded = event.ungrounded.length;
+            }
             if (event.type === "error") {
               failed = true;
               errorCode = event.code;
@@ -185,6 +201,8 @@ export async function POST(request: NextRequest) {
           cached: cached !== null,
           tools: toolNames,
           errorCode,
+          figuresChecked,
+          figuresUngrounded,
         });
         traceChatTurn({
           durationMs,

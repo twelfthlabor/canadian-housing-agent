@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { listings } from "@/lib/dataset";
-import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, defaultMinDiscountPct } from "@/lib/tools";
+import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, cityDealFloorPct, defaultMinDiscountPct } from "@/lib/tools";
 import type { Listing } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -131,7 +131,8 @@ export function queryListings(rows: Listing[], filters: ListingFilters): { total
         row.estValue !== null &&
         row.discountPct !== null &&
         row.price >= DEAL_MIN_PRICE &&
-        row.discountPct >= filters.minDiscount &&
+        // Each city keeps its own noise floor, so a national view does not call estimate error a deal.
+        row.discountPct >= Math.max(filters.minDiscount, cityDealFloorPct(row.city)) &&
         row.discountPct <= MAX_DISCOUNT_PCT
       );
     }

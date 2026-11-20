@@ -25,6 +25,9 @@ export type CitySnapshot = {
   shareUnder1M: number;
   medianSqft: number | null;
   updated: string;
+  /** Set only when count is below thinSampleThreshold; the median is then rough. */
+  thinSample?: true;
+  thinSampleThreshold?: number;
 };
 
 /** Entry as stored in market_summary.json (the city name is the key there). */
@@ -126,12 +129,19 @@ export type FindDealsQuery = {
 
 export type FindDealsResult = {
   city: string;
-  /** Effective minimum discount applied (clamped to [0, 60]). */
+  /** Effective minimum discount applied (clamped to [0, MAX_DISCOUNT_PCT]). */
   minDiscount: number;
   /** Scoped listings with a usable estimate and a price at or above the deal minimum. */
   considered: number;
-  /** Considered listings whose discountPct falls within [minDiscount, 60]. */
+  /** Considered listings whose discountPct falls within [minDiscount, MAX_DISCOUNT_PCT]. */
   totalMatches: number;
   returned: number;
   listings: Listing[];
+  /** The city's out-of-fold MdAPE (overall MdAPE when the city has none); null without valuation metadata. */
+  typicalErrorPct: number | null;
+  /** Default threshold: max(dataset threshold, 2 x typicalErrorPct). */
+  noiseFloorPct: number;
+  maxDiscountPct: number;
+  /** Set when no deal can be called (estimates too noisy) or a requested threshold is below the noise floor. */
+  note?: string;
 };

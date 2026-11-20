@@ -25,8 +25,6 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Docs index is fresh
-        run: npm run embed:docs && git diff --exit-code -- data/docs_index.json
       - name: Test
         run: npx vitest run
         env:

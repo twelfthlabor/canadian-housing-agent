@@ -10,6 +10,8 @@ import Icon from "./Icon";
 import MapCanvas from "./MapCanvas";
 import MortgageCalculator from "./MortgageCalculator";
 import { cityName, compactMoney, money } from "./format";
+import { MAX_DISCOUNT_PCT } from "@/lib/deals";
+import { isThinSample } from "@/lib/sample";
 
 const featured = ["toronto", "ottawa", "hamilton", "kitchener", "london", "mississauga", "barrie", "windsor"];
 
@@ -70,7 +72,7 @@ export default function Workspace({ summary, offline }: Props) {
   const mdapeByCity = valuationMeta?.oof_mdape_pct_by_city;
   const valuation = {
     minDiscountPct: valuationMeta?.params.min_discount_pct ?? 15,
-    maxDiscountPct: valuationMeta?.params.max_discount_pct ?? 60,
+    maxDiscountPct: MAX_DISCOUNT_PCT,
     mdapePct: typeof valuationMeta?.oof_mdape_pct === "number" ? valuationMeta.oof_mdape_pct : null,
     mdapeByCity: mdapeByCity && typeof mdapeByCity === "object" && !Array.isArray(mdapeByCity) ? mdapeByCity : {},
   };
@@ -135,7 +137,7 @@ export default function Workspace({ summary, offline }: Props) {
 
   return <div className="atlas-app">
     <header className="atlas-header">
-      <a className="wordmark" href="/" aria-label="Canadian Housing Agent home"><span className="atlas-symbol" aria-hidden="true"><i /><i /><i /></span>canada<span className="wordmark-label">HOUSING ATLAS</span></a>
+      <a className="wordmark" href="/" aria-label="canada Housing Atlas, home"><span className="atlas-symbol" aria-hidden="true"><i /><i /><i /></span>canada<span className="wordmark-label">HOUSING ATLAS</span></a>
       <nav className="workspace-nav" aria-label="Workspace view">
         <button aria-pressed={view === "explore"} onClick={() => { setView("explore"); setMobileView("map"); }}><Icon name="map" />Explore</button>
         <button aria-pressed={view === "compare"} onClick={() => { setView("compare"); setMobileView("map"); }}><Icon name="compare" />Compare<span className="nav-count">2</span></button>
@@ -152,7 +154,7 @@ export default function Workspace({ summary, offline }: Props) {
         <div className="index-toolbar"><span aria-live="polite">{visible.length} {visible.length === 1 ? "city" : "cities"}</span><label className="sr-only" htmlFor="sort">Sort cities</label><select id="sort" value={sort} onChange={event => setSort(event.target.value as Sort)}><option value="featured">Featured first</option><option value="name">City A–Z</option><option value="low">Lowest median</option><option value="high">Highest median</option></select></div>
         <div className="city-list">
           {visible.length === 0 ? <div className="no-cities"><h3>No cities match.</h3><p>Try another name or a higher median price.</p><button onClick={() => { setQuery(""); setCeiling(2_000_000); }}>Clear filters</button></div> : visible.map((city, index) => <div key={city} className={`city-row row-enter${selected === city ? " selected" : ""}`} style={{ "--i": Math.min(index, 14) } as CSSProperties}>
-            <button className="city-row-main" aria-pressed={selected === city} onClick={() => selectCity(city)}><span className="row-dot" /><span className="row-city"><strong>{cityName(city)}</strong><span>{summary.cities[city].count.toLocaleString("en-CA")} sampled listings</span></span><span className="row-price">{compactMoney(summary.cities[city].medianPrice)}<small>median</small></span></button>
+            <button className="city-row-main" aria-pressed={selected === city} onClick={() => selectCity(city)}><span className="row-dot" /><span className="row-city"><strong>{cityName(city)}</strong><span>{summary.cities[city].count.toLocaleString("en-CA")} sampled listings{isThinSample(summary.cities[city].count) ? " · small sample" : ""}</span></span><span className="row-price">{compactMoney(summary.cities[city].medianPrice)}<small>median</small></span></button>
             <button className="row-compare" onClick={() => compareCity(city)} aria-label={`Compare ${cityName(city)}`} title={`Compare ${cityName(city)}`}><Icon name="compare" /></button>
           </div>)}
         </div>
@@ -164,7 +166,7 @@ export default function Workspace({ summary, offline }: Props) {
           {visible.includes(selected) ? <section className="city-tray" aria-label={`${cityName(selected)} city details`}>
             <div className="tray-heading"><span className="micro-label"><span className="selection-dot" />SELECTED CITY</span><span className="tray-tabs" role="group" aria-label="City details view"><button aria-pressed={detailView === "overview"} onClick={() => setDetailView("overview")} aria-label="City overview"><Icon name="list" /></button><button aria-pressed={detailView === "beds"} onClick={() => setDetailView("beds")} aria-label="Bedroom prices"><Icon name="chart" /></button><button aria-pressed={detailView === "afford"} onClick={() => setDetailView("afford")} aria-label="Affordability calculator"><Icon name="calculator" /></button></span></div>
             <h2>{cityName(selected)}</h2>
-            {detailView === "overview" ? <div className="tray-content" key={`${selected}-overview`}><p className="tray-price"><CountUp value={snap.medianPrice} format={money} /><span>median asking price</span></p><div className="tray-stats"><span><strong><CountUp value={snap.count} /></strong>sampled listings</span><span><strong><CountUp value={Math.round(snap.shareUnder1M * 100)} />%</strong>asking under $1m</span></div></div> : detailView === "afford" ? <div className="tray-content tray-afford" key={`${selected}-afford`}><MortgageCalculator citySlug={selected} cityLabel={cityName(selected)} defaultPrice={snap.medianPrice} /></div> : <div className="tray-content tray-bedrooms" key={`${selected}-beds`}><p>Median asking price by bedroom count</p>{Object.entries(snap.medianByBeds).map(([bed, price]) => <div key={bed}><span>{bed} bed</span><span className="mini-track"><i style={{ width: `${price === null ? 0 : price / Math.max(...Object.values(snap.medianByBeds).map(value => value ?? 0)) * 100}%` }} /></span><strong>{price === null ? "No data" : compactMoney(price)}</strong></div>)}</div>}
+            {detailView === "overview" ? <div className="tray-content" key={`${selected}-overview`}><p className="tray-price"><CountUp value={snap.medianPrice} format={money} /><span>median asking price</span></p><div className="tray-stats"><span><strong><CountUp value={snap.count} /></strong>{isThinSample(snap.count) ? "listings · small sample" : "sampled listings"}</span><span><strong><CountUp value={Math.round(snap.shareUnder1M * 100)} />%</strong>asking under $1m</span></div>{isThinSample(snap.count) ? <p className="tray-note">Small sample: this median comes from only {snap.count.toLocaleString("en-CA")} listings, so treat it as rough.</p> : null}</div> : detailView === "afford" ? <div className="tray-content tray-afford" key={`${selected}-afford`}><MortgageCalculator citySlug={selected} cityLabel={cityName(selected)} defaultPrice={snap.medianPrice} /></div> : <div className="tray-content tray-bedrooms" key={`${selected}-beds`}><p>Median asking price by bedroom count</p>{Object.entries(snap.medianByBeds).map(([bed, price]) => <div key={bed}><span>{bed} bed</span><span className="mini-track"><i style={{ width: `${price === null ? 0 : price / Math.max(...Object.values(snap.medianByBeds).map(value => value ?? 0)) * 100}%` }} /></span><strong>{price === null ? "No data" : compactMoney(price)}</strong></div>)}</div>}
             <div className="tray-actions"><button onClick={() => compareCity(selected)}><Icon name="compare" />Compare</button><button onClick={() => ask(`Give me a market snapshot of ${cityName(selected)}`)}>Ask about this city<Icon name="arrow" /></button></div>
           </section> : <div className="map-filter-message"><strong>{visible.length ? "Choose a city to explore." : "No cities match your filters."}</strong><span>Select a visible map marker or clear your search.</span><button onClick={() => { setQuery(""); setCeiling(2_000_000); }}>Clear filters</button></div>}
         </MapCanvas> : view === "compare" ? <Comparison cities={summary.cities} pair={pair} setPair={setPair} onAsk={() => ask(`Compare ${cityName(pair[0])} and ${cityName(pair[1])}`)} /> : <DataTable cities={cities} city={selected} onCityChange={setSelected} totalRows={summary.totals.rows} valuation={valuation} />}

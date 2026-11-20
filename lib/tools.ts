@@ -1,6 +1,5 @@
 import { listings, summary } from "./dataset";
-import { MIN_PRICE, MortgageError, computeMortgage, maxPriceForIncome } from "./mortgage";
-import { retrieveDocs } from "./rag";
+import { GDS_LIMIT, MIN_PRICE, MortgageError, computeMortgage, maxPriceForIncome } from "./mortgage";
 import type {
   AreaRank,
   CitySnapshot,
@@ -24,10 +23,10 @@ const RANK_MAX_LIMIT = 10;
 const MIN_AREA_LISTINGS = 5;
 const FALLBACK_MIN_DISCOUNT_PCT = 15;
 
-/** Price floor for deal listings, shared by find_deals and the listings route. */
-export const DEAL_MIN_PRICE = 100_000;
-/** Discounts above this are data artefacts of the offline model, not deals. */
-export const MAX_DISCOUNT_PCT = 60;
+import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, NOISE_MULTIPLE, dealFloorPct } from "./deals";
+import { THIN_SAMPLE_COUNT, isThinSample } from "./sample";
+
+export { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT };
 
 /**
  * Overall MdAPE for the find_deals description, read from the valuation block so a
@@ -46,6 +45,19 @@ function overallMdapeText(): string {
 export function defaultMinDiscountPct(): number {
   const value = summary.valuation?.params?.min_discount_pct;
   return typeof value === "number" && Number.isFinite(value) ? value : FALLBACK_MIN_DISCOUNT_PCT;
+}
+
+/** A city's out-of-fold MdAPE, or the overall one when the city has none; null without valuation metadata. */
+export function cityTypicalErrorPct(city: string): number | null {
+  const byCityError = summary.valuation?.oof_mdape_pct_by_city?.[city];
+  if (typeof byCityError === "number" && Number.isFinite(byCityError)) return byCityError;
+  const overall = summary.valuation?.oof_mdape_pct;
+  return typeof overall === "number" && Number.isFinite(overall) ? overall : null;
+}
+
+/** Default deal threshold for a city: the dataset threshold or twice the city's typical error. */
+export function cityDealFloorPct(city: string): number {
+  return dealFloorPct(defaultMinDiscountPct(), cityTypicalErrorPct(city));
 }
 
 const byCity = new Map<string, Listing[]>();
@@ -233,6 +245,11 @@ export function searchListings(q: SearchQuery): SearchResult {
   };
 }
 
+/** Small samples carry a flag and the threshold, so the caveat an answer states is grounded. */
+function withSampleFlag(snapshot: CitySnapshot): CitySnapshot {
+  return isThinSample(snapshot.count) ? { ...snapshot, thinSample: true, thinSampleThreshold: THIN_SAMPLE_COUNT } : snapshot;
+}
+
 export function citySnapshot(query: SnapshotQuery | string): CitySnapshot | null {
   const city = typeof query === "string" ? query : asString(query?.city);
   const province = typeof query === "string" ? "" : normaliseProvince(query?.province);
@@ -244,7 +261,7 @@ export function citySnapshot(query: SnapshotQuery | string): CitySnapshot | null
   if (!province && !fsa && !hasFilters(filters)) {
     const snapshot = snapshots.get(key);
     if (!snapshot) return null;
-    return { ...snapshot, medianByBeds: { ...snapshot.medianByBeds } };
+    return withSampleFlag({ ...snapshot, medianByBeds: { ...snapshot.medianByBeds } });
   }
   const scoped = rows.filter(
     (row) =>
@@ -253,7 +270,7 @@ export function citySnapshot(query: SnapshotQuery | string): CitySnapshot | null
       matchesFilters(row, filters),
   );
   if (scoped.length === 0) return null;
-  return computeSnapshot(key, scoped);
+  return withSampleFlag(computeSnapshot(key, scoped));
 }
 
 export function rankAreas(query: RankAreasQuery): RankAreasResult | null {
@@ -327,7 +344,11 @@ export function findDeals(query: FindDealsQuery): FindDealsResult | null {
   if (!rows) return null;
 
   const requested = finiteOrUndefined(query?.minDiscount);
-  const minDiscount = Math.min(Math.max(requested ?? defaultMinDiscountPct(), 0), MAX_DISCOUNT_PCT);
+  const noiseFloorPct = cityDealFloorPct(key);
+  const typicalErrorPct = cityTypicalErrorPct(key);
+  // An explicit minDiscount is honoured; the default is the city's noise floor.
+  const minDiscount = Math.min(Math.max(requested ?? noiseFloorPct, 0), MAX_DISCOUNT_PCT);
+  const tooNoisy = requested === undefined && noiseFloorPct > MAX_DISCOUNT_PCT;
   const filters = filtersFrom(query ?? {});
 
   const considered: Listing[] = [];
@@ -337,9 +358,11 @@ export function findDeals(query: FindDealsQuery): FindDealsResult | null {
     considered.push(row);
   }
 
-  const matches = considered.filter(
-    (row) => (row.discountPct as number) >= minDiscount && (row.discountPct as number) <= MAX_DISCOUNT_PCT,
-  );
+  const matches = tooNoisy
+    ? []
+    : considered.filter(
+        (row) => (row.discountPct as number) >= minDiscount && (row.discountPct as number) <= MAX_DISCOUNT_PCT,
+      );
   const sorted = matches
     .slice()
     .sort(
@@ -357,6 +380,14 @@ export function findDeals(query: FindDealsQuery): FindDealsResult | null {
     totalMatches: matches.length,
     returned: Math.min(limit, sorted.length),
     listings: sorted.slice(0, limit).map((row) => ({ ...row })),
+    typicalErrorPct,
+    noiseFloorPct,
+    maxDiscountPct: MAX_DISCOUNT_PCT,
+    ...(tooNoisy
+      ? { note: `Estimates in this city typically err by ${typicalErrorPct}%, so no discount up to the ${MAX_DISCOUNT_PCT}% maximum clears ${NOISE_MULTIPLE} times that error.` }
+      : requested !== undefined && requested < noiseFloorPct
+        ? { note: `The requested ${minDiscount}% is below this city's noise floor of ${noiseFloorPct}% (${NOISE_MULTIPLE} times its typical ${typicalErrorPct}% error); smaller discounts may be estimate error.` }
+        : {}),
   };
 }
 
@@ -571,7 +602,7 @@ export const TOOL_SPECS = [
         `Find listings asking below the comparable-listings estimate: an offline estimate of the typical asking price for similar listings, computed from this sample's comparable asking prices. It is not sold prices, an appraisal, or a prediction. ` +
         `The deal window is a price of at least $${DEAL_MIN_PRICE.toLocaleString("en-CA")} and a discount in [minDiscount, ${MAX_DISCOUNT_PCT}]; rows outside it are not returned. ` +
         `Returns city, the applied minDiscount, considered (scoped listings with a usable estimate and a price at or above the ${DEAL_MIN_PRICE.toLocaleString("en-CA")} deal floor), totalMatches (considered listings with discountPct in range), and the top deals sorted by discountPct descending. ` +
-        `discountPct is the percent below the estimate (positive = asking below). Discounts inside the model's noise margin are not meaningful: estimates typically err by ${overallMdapeText()}, per-city error is shown in the app and can be much higher in small cities. Discounts above the ${MAX_DISCOUNT_PCT}% maximum are treated as model artefacts and excluded. ` +
+        `discountPct is the percent below the estimate (positive = asking below). Discounts inside the model's noise margin are not meaningful: estimates typically err by ${overallMdapeText()}, per-city error is shown in the app and can be much higher in small cities. By default minDiscount is the city's noise floor, ${NOISE_MULTIPLE} times its typical error (returned as noiseFloorPct and typicalErrorPct); when that floor is above the maximum the city returns no deals and a note says why. Discounts above the ${MAX_DISCOUNT_PCT}% maximum are treated as model artefacts and excluded. When the result has a note, state it. The estimate does not know property type, so a large gap can be a condo, mobile home or land lease compared with houses: tell the user to check the listing. ` +
         `Returns null for an unknown city. Use this for undervalued, bargain, deal, or discount questions. ${NEVER_INVENT}`,
       parameters: {
         type: "object",
@@ -583,9 +614,9 @@ export const TOOL_SPECS = [
           minDiscount: {
             type: "number",
             minimum: 0,
-            maximum: 60,
+            maximum: MAX_DISCOUNT_PCT,
             description:
-              "Minimum discount percent below the estimate, inclusive. Defaults to the dataset's deal threshold from market_summary valuation metadata (15 when that block is absent); clamped to [0, 60].",
+              `Minimum discount percent below the estimate, inclusive. Only pass it when the user names a threshold. Defaults to the city's noise floor: the larger of the dataset's deal threshold from valuation metadata and ${NOISE_MULTIPLE} times the city's typical error; clamped to [0, ${MAX_DISCOUNT_PCT}].`,
           },
           minPrice: {
             type: "number",
@@ -609,34 +640,6 @@ export const TOOL_SPECS = [
           },
         },
         required: ["city"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_docs",
-      description:
-        `Search the project's own documentation (README.md, docs/DATA.md, docs/DEMO.md, docs/PLAN.md) for how this project, its data pipeline, and the hmb-v1 estimate work. ` +
-        `Use this for questions about the project or model itself; statistics questions still use the data tools. ` +
-        `Returns the matching passages with their source file and section heading, most similar first. ` +
-        `Use this tool for project mechanics; never invent numbers.`,
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: 'Natural-language question about the project or its documentation (for example "how does the hmb-v1 estimate work?").',
-          },
-          limit: {
-            type: "integer",
-            minimum: 1,
-            maximum: 10,
-            description: "Maximum passages to return. Defaults to 5, capped at 10.",
-          },
-        },
-        required: ["query"],
         additionalProperties: false,
       },
     },
@@ -758,20 +761,17 @@ export const TOOL_IMPLS: Record<string, (args: any) => unknown> = {
       if (price === undefined && householdIncome === undefined) {
         return { error: "Give a price, a householdIncome, or both." };
       }
-      const payment = price === undefined ? null : computeMortgage({ price, ...terms });
+      // The GDS limit is stated in answers, so it travels in the result the grounding check reads.
+      const gdsLimitPct = GDS_LIMIT * 100;
+      const payment = price === undefined ? null : { ...computeMortgage({ price, ...terms }), gdsLimitPct };
       if (householdIncome === undefined) return payment;
       // Validates the terms once at the minimum price so bad inputs are reported, not silently unaffordable.
       computeMortgage({ price: MIN_PRICE, ...terms });
       const maxAffordablePrice = maxPriceForIncome({ householdIncome, ...terms });
-      return { ...(payment ?? {}), householdIncome, maxAffordablePrice };
+      return { ...(payment ?? {}), householdIncome, maxAffordablePrice, gdsLimitPct };
     } catch (error) {
       if (error instanceof MortgageError) return { error: error.message };
       throw error;
     }
-  },
-  search_docs: (args: any) => {
-    const query = asString(args?.query);
-    const results = retrieveDocs(query, asNumber(args?.limit));
-    return { query, returned: results.length, results };
   },
 };
