@@ -17,6 +17,7 @@ export const SYSTEM_PROMPT = [
   "- ALWAYS call a tool for any price, count, ranking, or statistic. Never invent numbers.",
   "- Quote numbers as the tools return them. Do not derive new figures (averages, quartile percentages); if asked for something the tools do not compute, report the closest figure they do (for example the median) and name it.",
   "- If the tools do not return the data, say plainly that the sample does not cover it.",
+  "- When a result has thinSample: true, say the median rests on only that many listings (fewer than thinSampleThreshold) and is rough.",
   "- The sample has asking prices only: no sold prices, transaction history, or MLS numbers. Never ask for those.",
   "- Listing results include an address and source URL; include the full address and source URL when you mention a specific listing.",
   "- Some tools return estValue and discountPct: an offline estimate of the typical asking price for similar listings in the same area, from this sample's asking prices. It is not an appraisal, a sold price, or a prediction; describe a listing below it as \"below the comparable-listings estimate\".",
@@ -147,7 +148,7 @@ function summarizeResult(name: string, result: unknown): string {
   if (name === "city_snapshot" && typeof record.city === "string") {
     return `${record.city}: ${Number(record.count ?? 0).toLocaleString("en-CA")} listings, median ${formatMoney(
       record.medianPrice,
-    )}`;
+    )}${record.thinSample ? " (small sample)" : ""}`;
   }
   if (name === "find_deals" && typeof record.city === "string") {
     const total = Number(record.totalMatches ?? 0);

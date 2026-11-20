@@ -234,8 +234,18 @@ describe("citySnapshot", () => {
 
   it("computes stats at runtime that match market_summary.json for every city", () => {
     for (const city of cities) {
-      expect(citySnapshot(city)).toEqual({ city, ...summary.cities[city] });
+      const entry = summary.cities[city];
+      const flag = entry.count < 100 ? { thinSample: true, thinSampleThreshold: 100 } : {};
+      expect(citySnapshot(city)).toEqual({ city, ...entry, ...flag });
     }
+  });
+
+  it("flags small samples and leaves large ones unchanged", () => {
+    expect(citySnapshot("winnipeg")).toMatchObject({ count: summary.cities.winnipeg.count, thinSample: true, thinSampleThreshold: 100 });
+    expect(citySnapshot("ottawa")?.thinSample).toBeUndefined();
+    // A filtered slice of a large city can be thin too.
+    const slice = citySnapshot({ city: "ottawa", beds: 5, minPrice: 3_000_000 });
+    if (slice) expect(slice.thinSample).toBe(slice.count < 100 ? true : undefined);
   });
 
   it("cross-checks the major city against its market_summary entry", () => {

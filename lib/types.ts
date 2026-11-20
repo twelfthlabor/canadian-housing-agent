@@ -25,6 +25,9 @@ export type CitySnapshot = {
   shareUnder1M: number;
   medianSqft: number | null;
   updated: string;
+  /** Set only when count is below thinSampleThreshold; the median is then rough. */
+  thinSample?: true;
+  thinSampleThreshold?: number;
 };
 
 /** Entry as stored in market_summary.json (the city name is the key there). */

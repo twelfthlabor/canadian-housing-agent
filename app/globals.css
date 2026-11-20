@@ -115,6 +115,8 @@ button { background: none; border: 0; }
 .price-marker.selected > span { color: #d6dace; }
 .price-marker.selected::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); position: absolute; right: 9px; top: 12px; }
 .price-marker.selected strong { padding-right: 12px; }
+/* Small samples read as provisional: dashed outline, never the selected style. */
+.price-marker.thin:not(.selected) { border-style: dashed; }
 .map-heading { position: absolute; left: 39px; top: 36px; pointer-events: none; }
 .map-heading .micro-label { color: #778772; font-size: 8px; letter-spacing: 1.3px; }
 .map-heading h1 { font-size: clamp(36px, 3.2vw, 52px); font-weight: 500; line-height: 1.04; letter-spacing: -2.4px; margin-top: 15px; }
@@ -531,3 +533,5 @@ dialog[open] { animation: dialog-enter 220ms var(--ease); }
 
 @media (max-width: 1280px) { .data-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .filter-search { grid-column: 1 / -1; } }
 @media (max-width: 760px) { .data-scroll { flex: none; height: 58vh; } .data-filters { grid-template-columns: 1fr 1fr; } .filter-search, .filter-field:nth-child(2) { grid-column: 1 / -1; } .data-download { width: 100%; justify-content: center; } .data-more { flex-direction: column; } .mortgage-facts { grid-template-columns: 1fr; } }
+
+.tray-note { margin: 14px 0 0; padding: 9px 11px; font-size: 12px; line-height: 1.45; color: #5c4a24; background: #f6efdc; border: 1px solid #e4d6b0; border-radius: 6px; }

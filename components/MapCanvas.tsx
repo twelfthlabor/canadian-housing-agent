@@ -5,6 +5,7 @@ import geography from "@/public/geography/canada.json";
 import type { CitySummary } from "@/lib/types";
 import Icon from "./Icon";
 import { cityName, compactMoney } from "./format";
+import { MIN_LABEL_COUNT, isThinSample } from "@/lib/sample";
 
 const project = (lon: number, lat: number) => [(lon + 141) * 12, (72 - lat) * 24];
 const initial = { x: 534, y: 390, scale: 0.69 };
@@ -157,7 +158,9 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
       if (size.width <= 640 && y > size.height - (size.height < 650 ? 315 : 345)) return [];
       const offsets = [[-43, -55], [18, -34], [-105, -34], [-43, 18], [18, -85], [-105, -85], [18, 40], [-105, 40], [18, 85]];
       let label: { x: number; y: number } | undefined;
-      if (priority.includes(city) || selected === city || camera.scale > 1.8) {
+      // A median from a handful of listings is not a headline figure; the selected city still gets its label.
+      const labelable = cities[city].count >= MIN_LABEL_COUNT || selected === city;
+      if (labelable && (priority.includes(city) || selected === city || camera.scale > 1.8)) {
         for (const [dx, dy] of offsets) {
           const lx = x + dx, ly = y + dy;
           const underTitle = lx < (size.width <= 640 ? 255 : 300) && ly < (size.width <= 640 && size.height < 650 ? 100 : 170);
@@ -226,8 +229,8 @@ export default function MapCanvas({ cities, visible, selected, compared, onSelec
     </svg>
     <div className="map-points">
       {markers.map(marker => <div key={marker.city}>
-        <button className={`city-point${marker.city === selected ? " selected" : ""}`} style={{ left: marker.x, top: marker.y }} onClick={() => onSelect(marker.city)} aria-label={`Select ${cityName(marker.city)}, median ${compactMoney(cities[marker.city].medianPrice)}`} aria-pressed={marker.city === selected} />
-        {marker.label ? <button className={`price-marker${marker.city === selected ? " selected" : ""}`} style={{ left: marker.label.x, top: marker.label.y }} onClick={() => onSelect(marker.city)} aria-pressed={marker.city === selected}><strong>{compactMoney(cities[marker.city].medianPrice)}</strong><span>{cityName(marker.city)}</span></button> : null}
+        <button className={`city-point${marker.city === selected ? " selected" : ""}`} style={{ left: marker.x, top: marker.y }} onClick={() => onSelect(marker.city)} aria-label={`Select ${cityName(marker.city)}, median ${compactMoney(cities[marker.city].medianPrice)}${isThinSample(cities[marker.city].count) ? `, small sample of ${cities[marker.city].count} listings` : ""}`} aria-pressed={marker.city === selected} />
+        {marker.label ? <button className={`price-marker${marker.city === selected ? " selected" : ""}${isThinSample(cities[marker.city].count) ? " thin" : ""}`} style={{ left: marker.label.x, top: marker.label.y }} onClick={() => onSelect(marker.city)} aria-pressed={marker.city === selected}><strong>{compactMoney(cities[marker.city].medianPrice)}</strong><span>{cityName(marker.city)}{isThinSample(cities[marker.city].count) ? ` · ${cities[marker.city].count} listings` : ""}</span></button> : null}
       </div>)}
     </div>
     <div className="map-heading" ref={heading}><span className="micro-label">THE HOUSING ATLAS</span><h1>Canada,<br /><span>in perspective.</span></h1><p>Select a place. See what’s asking.</p></div>

@@ -24,6 +24,7 @@ const MIN_AREA_LISTINGS = 5;
 const FALLBACK_MIN_DISCOUNT_PCT = 15;
 
 import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, NOISE_MULTIPLE, dealFloorPct } from "./deals";
+import { THIN_SAMPLE_COUNT, isThinSample } from "./sample";
 
 export { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT };
 
@@ -244,6 +245,11 @@ export function searchListings(q: SearchQuery): SearchResult {
   };
 }
 
+/** Small samples carry a flag and the threshold, so the caveat an answer states is grounded. */
+function withSampleFlag(snapshot: CitySnapshot): CitySnapshot {
+  return isThinSample(snapshot.count) ? { ...snapshot, thinSample: true, thinSampleThreshold: THIN_SAMPLE_COUNT } : snapshot;
+}
+
 export function citySnapshot(query: SnapshotQuery | string): CitySnapshot | null {
   const city = typeof query === "string" ? query : asString(query?.city);
   const province = typeof query === "string" ? "" : normaliseProvince(query?.province);
@@ -255,7 +261,7 @@ export function citySnapshot(query: SnapshotQuery | string): CitySnapshot | null
   if (!province && !fsa && !hasFilters(filters)) {
     const snapshot = snapshots.get(key);
     if (!snapshot) return null;
-    return { ...snapshot, medianByBeds: { ...snapshot.medianByBeds } };
+    return withSampleFlag({ ...snapshot, medianByBeds: { ...snapshot.medianByBeds } });
   }
   const scoped = rows.filter(
     (row) =>
@@ -264,7 +270,7 @@ export function citySnapshot(query: SnapshotQuery | string): CitySnapshot | null
       matchesFilters(row, filters),
   );
   if (scoped.length === 0) return null;
-  return computeSnapshot(key, scoped);
+  return withSampleFlag(computeSnapshot(key, scoped));
 }
 
 export function rankAreas(query: RankAreasQuery): RankAreasResult | null {
