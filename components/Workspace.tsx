@@ -10,6 +10,7 @@ import Icon from "./Icon";
 import MapCanvas from "./MapCanvas";
 import MortgageCalculator from "./MortgageCalculator";
 import { cityName, compactMoney, money } from "./format";
+import { MAX_DISCOUNT_PCT } from "@/lib/deals";
 
 const featured = ["toronto", "ottawa", "hamilton", "kitchener", "london", "mississauga", "barrie", "windsor"];
 
@@ -70,7 +71,7 @@ export default function Workspace({ summary, offline }: Props) {
   const mdapeByCity = valuationMeta?.oof_mdape_pct_by_city;
   const valuation = {
     minDiscountPct: valuationMeta?.params.min_discount_pct ?? 15,
-    maxDiscountPct: valuationMeta?.params.max_discount_pct ?? 60,
+    maxDiscountPct: MAX_DISCOUNT_PCT,
     mdapePct: typeof valuationMeta?.oof_mdape_pct === "number" ? valuationMeta.oof_mdape_pct : null,
     mdapeByCity: mdapeByCity && typeof mdapeByCity === "object" && !Array.isArray(mdapeByCity) ? mdapeByCity : {},
   };

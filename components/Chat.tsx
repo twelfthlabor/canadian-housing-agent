@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import { cityName, money } from "./format";
 import { VALUATION_FALLBACK, mdapeText, type ValuationInfo } from "./DataTable";
+import { dealFloorPct } from "@/lib/deals";
 
 type ToolChip = {
   id: string;
@@ -437,7 +438,7 @@ export default function Chat({ offline, draft, valuation }: { offline: boolean; 
             <ul className="listing-cards" aria-label={`${message.search.cards.length} of ${message.search.total.toLocaleString("en-CA")} matching sample listings`}>
               {message.search.cards.map((card, cardIndex) => <li className="listing-card" key={cardIndex}>
                 <strong className="listing-card-price">{money(card.price)}</strong>
-                {card.discountPct !== null && card.estValue !== null && card.discountPct >= minDiscountPct && card.discountPct <= maxDiscountPct ? <span className="deal-badge listing-card-deal" title={dealTooltip(card.city, card.estValue, mdapePct, mdapeByCity)} aria-label={dealAria(card.city, card.estValue, card.discountPct, mdapePct, mdapeByCity)}>{Math.round(card.discountPct)}% below est.</span> : null}
+                {card.discountPct !== null && card.estValue !== null && card.discountPct >= dealFloorPct(minDiscountPct, mdapeByCity[card.city] ?? mdapePct) && card.discountPct <= maxDiscountPct ? <span className="deal-badge listing-card-deal" title={dealTooltip(card.city, card.estValue, mdapePct, mdapeByCity)} aria-label={dealAria(card.city, card.estValue, card.discountPct, mdapePct, mdapeByCity)}>{Math.round(card.discountPct)}% below est.</span> : null}
                 {cardMeta(card) ? <span className="listing-card-meta">{cardMeta(card)}</span> : null}
                 {card.address ? <span className="listing-card-address">{card.address}</span> : null}
                 <span className="listing-card-city">{card.fsa ? <span className="listing-card-fsa">{card.fsa}</span> : null}{cityName(card.city)}</span>

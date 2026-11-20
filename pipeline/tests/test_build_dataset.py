@@ -324,7 +324,7 @@ class PipelineEndToEnd(unittest.TestCase):
         self.assertEqual(valuation["oof_mdape_pct_top_cities"], {})
         self.assertEqual(valuation["oof_mdape_pct_by_city"], {})
         self.assertEqual(valuation["params"]["min_discount_pct"], 15)
-        self.assertEqual(valuation["params"]["max_discount_pct"], 60)
+        self.assertEqual(valuation["params"]["max_discount_pct"], 50)
         self.assertEqual(valuation["params"]["deal_min_price"], 100000)
         self.assertEqual(valuation["params"]["folds"], 5)
         self.assertEqual(valuation["params"]["min_city_rows"], 30)

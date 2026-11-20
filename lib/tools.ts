@@ -23,10 +23,9 @@ const RANK_MAX_LIMIT = 10;
 const MIN_AREA_LISTINGS = 5;
 const FALLBACK_MIN_DISCOUNT_PCT = 15;
 
-/** Price floor for deal listings, shared by find_deals and the listings route. */
-export const DEAL_MIN_PRICE = 100_000;
-/** Discounts above this are data artefacts of the offline model, not deals. */
-export const MAX_DISCOUNT_PCT = 60;
+import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, NOISE_MULTIPLE, dealFloorPct } from "./deals";
+
+export { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT };
 
 /**
  * Overall MdAPE for the find_deals description, read from the valuation block so a
@@ -45,6 +44,19 @@ function overallMdapeText(): string {
 export function defaultMinDiscountPct(): number {
   const value = summary.valuation?.params?.min_discount_pct;
   return typeof value === "number" && Number.isFinite(value) ? value : FALLBACK_MIN_DISCOUNT_PCT;
+}
+
+/** A city's out-of-fold MdAPE, or the overall one when the city has none; null without valuation metadata. */
+export function cityTypicalErrorPct(city: string): number | null {
+  const byCityError = summary.valuation?.oof_mdape_pct_by_city?.[city];
+  if (typeof byCityError === "number" && Number.isFinite(byCityError)) return byCityError;
+  const overall = summary.valuation?.oof_mdape_pct;
+  return typeof overall === "number" && Number.isFinite(overall) ? overall : null;
+}
+
+/** Default deal threshold for a city: the dataset threshold or twice the city's typical error. */
+export function cityDealFloorPct(city: string): number {
+  return dealFloorPct(defaultMinDiscountPct(), cityTypicalErrorPct(city));
 }
 
 const byCity = new Map<string, Listing[]>();
@@ -326,7 +338,11 @@ export function findDeals(query: FindDealsQuery): FindDealsResult | null {
   if (!rows) return null;
 
   const requested = finiteOrUndefined(query?.minDiscount);
-  const minDiscount = Math.min(Math.max(requested ?? defaultMinDiscountPct(), 0), MAX_DISCOUNT_PCT);
+  const noiseFloorPct = cityDealFloorPct(key);
+  const typicalErrorPct = cityTypicalErrorPct(key);
+  // An explicit minDiscount is honoured; the default is the city's noise floor.
+  const minDiscount = Math.min(Math.max(requested ?? noiseFloorPct, 0), MAX_DISCOUNT_PCT);
+  const tooNoisy = requested === undefined && noiseFloorPct > MAX_DISCOUNT_PCT;
   const filters = filtersFrom(query ?? {});
 
   const considered: Listing[] = [];
@@ -336,9 +352,11 @@ export function findDeals(query: FindDealsQuery): FindDealsResult | null {
     considered.push(row);
   }
 
-  const matches = considered.filter(
-    (row) => (row.discountPct as number) >= minDiscount && (row.discountPct as number) <= MAX_DISCOUNT_PCT,
-  );
+  const matches = tooNoisy
+    ? []
+    : considered.filter(
+        (row) => (row.discountPct as number) >= minDiscount && (row.discountPct as number) <= MAX_DISCOUNT_PCT,
+      );
   const sorted = matches
     .slice()
     .sort(
@@ -356,6 +374,14 @@ export function findDeals(query: FindDealsQuery): FindDealsResult | null {
     totalMatches: matches.length,
     returned: Math.min(limit, sorted.length),
     listings: sorted.slice(0, limit).map((row) => ({ ...row })),
+    typicalErrorPct,
+    noiseFloorPct,
+    maxDiscountPct: MAX_DISCOUNT_PCT,
+    ...(tooNoisy
+      ? { note: `Estimates in this city typically err by ${typicalErrorPct}%, so no discount up to the ${MAX_DISCOUNT_PCT}% maximum clears ${NOISE_MULTIPLE} times that error.` }
+      : requested !== undefined && requested < noiseFloorPct
+        ? { note: `The requested ${minDiscount}% is below this city's noise floor of ${noiseFloorPct}% (${NOISE_MULTIPLE} times its typical ${typicalErrorPct}% error); smaller discounts may be estimate error.` }
+        : {}),
   };
 }
 
@@ -570,7 +596,7 @@ export const TOOL_SPECS = [
         `Find listings asking below the comparable-listings estimate: an offline estimate of the typical asking price for similar listings, computed from this sample's comparable asking prices. It is not sold prices, an appraisal, or a prediction. ` +
         `The deal window is a price of at least $${DEAL_MIN_PRICE.toLocaleString("en-CA")} and a discount in [minDiscount, ${MAX_DISCOUNT_PCT}]; rows outside it are not returned. ` +
         `Returns city, the applied minDiscount, considered (scoped listings with a usable estimate and a price at or above the ${DEAL_MIN_PRICE.toLocaleString("en-CA")} deal floor), totalMatches (considered listings with discountPct in range), and the top deals sorted by discountPct descending. ` +
-        `discountPct is the percent below the estimate (positive = asking below). Discounts inside the model's noise margin are not meaningful: estimates typically err by ${overallMdapeText()}, per-city error is shown in the app and can be much higher in small cities. Discounts above the ${MAX_DISCOUNT_PCT}% maximum are treated as model artefacts and excluded. ` +
+        `discountPct is the percent below the estimate (positive = asking below). Discounts inside the model's noise margin are not meaningful: estimates typically err by ${overallMdapeText()}, per-city error is shown in the app and can be much higher in small cities. By default minDiscount is the city's noise floor, ${NOISE_MULTIPLE} times its typical error (returned as noiseFloorPct and typicalErrorPct); when that floor is above the maximum the city returns no deals and a note says why. Discounts above the ${MAX_DISCOUNT_PCT}% maximum are treated as model artefacts and excluded. When the result has a note, state it. The estimate does not know property type, so a large gap can be a condo, mobile home or land lease compared with houses: tell the user to check the listing. ` +
         `Returns null for an unknown city. Use this for undervalued, bargain, deal, or discount questions. ${NEVER_INVENT}`,
       parameters: {
         type: "object",
@@ -582,9 +608,9 @@ export const TOOL_SPECS = [
           minDiscount: {
             type: "number",
             minimum: 0,
-            maximum: 60,
+            maximum: MAX_DISCOUNT_PCT,
             description:
-              "Minimum discount percent below the estimate, inclusive. Defaults to the dataset's deal threshold from market_summary valuation metadata (15 when that block is absent); clamped to [0, 60].",
+              `Minimum discount percent below the estimate, inclusive. Only pass it when the user names a threshold. Defaults to the city's noise floor: the larger of the dataset's deal threshold from valuation metadata and ${NOISE_MULTIPLE} times the city's typical error; clamped to [0, ${MAX_DISCOUNT_PCT}].`,
           },
           minPrice: {
             type: "number",

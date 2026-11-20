@@ -155,6 +155,7 @@ function summarizeResult(name: string, result: unknown): string {
     const deals = Array.isArray(record.listings)
       ? (record.listings as Array<Record<string, unknown>>)
       : [];
+    if (typeof record.note === "string" && (total === 0 || deals.length === 0)) return record.note;
     if (total === 0 || deals.length === 0) {
       return `no deals in ${record.city} at or above ${Number(record.minDiscount ?? 0)}% below estimate (${considered.toLocaleString(
         "en-CA",

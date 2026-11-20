@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Listing } from "@/lib/types";
+import { MAX_DISCOUNT_PCT, NOISE_MULTIPLE, dealFloorPct } from "@/lib/deals";
 import CountUp from "./CountUp";
 import Icon from "./Icon";
 import MoneyInput from "./MoneyInput";
@@ -27,7 +28,7 @@ export type ValuationInfo = {
   dealMinPrice?: number;
 };
 
-export const VALUATION_FALLBACK: ValuationInfo = { minDiscountPct: 15, maxDiscountPct: 60, mdapePct: null, mdapeByCity: {}, dealMinPrice: 100_000 };
+export const VALUATION_FALLBACK: ValuationInfo = { minDiscountPct: 15, maxDiscountPct: MAX_DISCOUNT_PCT, mdapePct: null, mdapeByCity: {}, dealMinPrice: 100_000 };
 
 /** Rows per request; the API caps its own limit at 200. */
 const PAGE_SIZE = 60;
@@ -187,7 +188,7 @@ export default function DataTable({ cities, city, onCityChange, totalRows, valua
   const rowMdape = (row: Listing) => mdapeByCity[row.city] ?? mdapePct;
   const singleCityMdape = filters.scope ? mdapeByCity[filters.scope] : undefined;
   const sortLine = discountMode
-    ? `Sorted by biggest discounts: at least ${minDiscountPct}% below the comparable-listings estimate. Discounts above ${maxDiscountPct}% are outside the model's reliable range and are not shown as deals.`
+    ? `Sorted by biggest discounts: at least ${minDiscountPct}% below the comparable-listings estimate and at least ${NOISE_MULTIPLE} times that city's typical estimate error. Discounts above ${maxDiscountPct}% are outside the model's reliable range and are not shown as deals.`
     : `Sorted by ${SORT_LABELS[filters.sort].toLowerCase()}. In Vs estimate, "—" marks rows without an estimate or with a discount above ${maxDiscountPct}%, beyond the model's reliable range.`;
 
   return <div className="data-view">
@@ -239,7 +240,7 @@ export default function DataTable({ cities, city, onCityChange, totalRows, valua
             <td>{typeof row.discountPct === "number" && typeof row.estValue === "number"
               ? row.discountPct > maxDiscountPct
                 ? <span title="Discount beyond the model's reliable range">—</span>
-                : row.discountPct >= minDiscountPct
+                : row.discountPct >= dealFloorPct(minDiscountPct, rowMdape(row))
                   ? <span className="deal-badge" title={`Estimated typical asking price: ${money(row.estValue)}`} aria-label={`${Math.round(row.discountPct)}% below estimated typical asking price of ${money(row.estValue)}${typeof rowMdape(row) === "number" ? `; estimates typically err by about ±${mdapeText(rowMdape(row) as number)}%` : ""}`}>{Math.round(row.discountPct)}% below est.</span>
                   : <span className="estimate-near" title={`Estimated typical asking price: ${money(row.estValue)}`}>{Math.round(row.discountPct)}% vs est.</span>
               : "—"}</td>
