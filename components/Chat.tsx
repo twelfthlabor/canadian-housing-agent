@@ -37,6 +37,8 @@ type Message = {
   tools: ToolChip[];
   search: { cards: ListingCard[]; total: number } | null;
   basis: Basis | null;
+  /** The server's check of this answer's figures against its tool results. */
+  grounding: { checked: number; ungrounded: string[] } | null;
   cached: boolean;
   pending: boolean;
 };
@@ -135,7 +137,7 @@ function updateLastAssistant(
 }
 
 function emptyMessage(role: Message["role"]): Message {
-  return { role, content: "", tools: [], search: null, basis: null, cached: false, pending: false };
+  return { role, content: "", tools: [], search: null, basis: null, grounding: null, cached: false, pending: false };
 }
 
 /** Cards shown per search result, and the chat panel is narrow: keep it small. */
@@ -384,6 +386,12 @@ export default function Chat({ offline, draft, valuation }: { offline: boolean; 
             case "cached":
               setMessages((prev) => updateLastAssistant(prev, (message) => ({ ...message, cached: true })));
               break;
+            case "grounding":
+              if (typeof event.checked === "number" && Array.isArray(event.ungrounded)) {
+                const grounding = { checked: event.checked, ungrounded: event.ungrounded.filter((item): item is string => typeof item === "string") };
+                setMessages((prev) => updateLastAssistant(prev, (message) => ({ ...message, grounding })));
+              }
+              break;
             case "error": {
               const code = typeof event.code === "string" ? event.code : "provider_error";
               setError(ERROR_TEXT[code] ?? ERROR_TEXT.provider_error);
@@ -447,6 +455,11 @@ export default function Chat({ offline, draft, valuation }: { offline: boolean; 
             </ul>
             {message.search.total > message.search.cards.length ? <span className="listing-cards-note">Showing {message.search.cards.length} of {message.search.total.toLocaleString("en-CA")}</span> : null}
           </> : null}
+          {message.grounding && message.grounding.checked > 0 ? <p className={`answer-grounding${message.grounding.ungrounded.length ? " warn" : ""}`}>
+            {message.grounding.ungrounded.length === 0
+              ? `${message.grounding.checked === 1 ? "The figure matches" : `All ${message.grounding.checked} figures match`} the tool results below`
+              : `${message.grounding.ungrounded.length} of ${message.grounding.checked} figures could not be traced to a tool result: ${message.grounding.ungrounded.join(", ")}`}
+          </p> : null}
           {message.basis !== null ? <p className="answer-basis">Based on {message.basis.value.toLocaleString("en-CA")} sample listings · asking prices only, not live MLS</p> : null}
           {message.tools.length > 0 ? <details className="provenance">
             <summary><Icon name="database" /><span>How this answer was computed</span><Icon name="chevron" className="provenance-chevron" /></summary>

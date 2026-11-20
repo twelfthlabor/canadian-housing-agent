@@ -25,7 +25,7 @@ button { background: none; border: 0; }
 .atlas-symbol i:nth-child(3) { height: 23px; }
 .wordmark-label { font: 8px/1.7 var(--mono); letter-spacing: 1px; max-width: 50px; margin-left: 9px; border-left: 1px solid #d4d8cf; padding-left: 12px; }
 .workspace-nav { display: flex; gap: 4px; align-items: center; background: #eeefe9; border-radius: 100px; padding: 4px; }
-.workspace-nav button { display: flex; align-items: center; gap: 7px; padding: 8px 15px; border-radius: 100px; font-size: 12px; color: #787e75; }
+.workspace-nav button { display: flex; align-items: center; gap: 7px; padding: 8px 15px; border-radius: 100px; font-size: 12px; color: #5f665c; }
 .workspace-nav button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 1px 3px #1e2d1b16; }
 .workspace-nav svg { width: 15px; height: 15px; }
 .nav-count { font: 9px var(--mono); width: 16px; height: 16px; display: grid; place-items: center; background: #e1e4dc; border-radius: 50%; }
@@ -102,7 +102,7 @@ button { background: none; border: 0; }
 .lake-label { position: absolute; font: 9px var(--mono); letter-spacing: 2px; color: #718f926e; transform: translate(-50%, -50%); white-space: nowrap; }
 .marker-leaders path { fill: none; stroke: #87958766; stroke-width: 1; }
 .marker-leaders path.selected { stroke: #bd6848aa; }
-.city-point { pointer-events: auto; position: absolute; width: 20px; height: 20px; border: 0; border-radius: 50%; transform: translate(-50%, -50%); display: grid; place-items: center; z-index: 1; }
+.city-point { pointer-events: auto; position: absolute; width: 24px; height: 24px; border: 0; border-radius: 50%; transform: translate(-50%, -50%); display: grid; place-items: center; z-index: 1; }
 .city-point::after { content: ""; width: 5px; height: 5px; border-radius: 50%; border: 1.5px solid #fcfcf7; background: #637c65; box-shadow: 0 0 0 1px #71866b66; }
 .city-point.selected::after { background: #c4613e; width: 8px; height: 8px; box-shadow: 0 0 0 5px #ed835e20; }
 .city-point:hover::after { transform: scale(1.5); background: var(--accent); }
@@ -272,6 +272,10 @@ dialog[open] { animation: dialog-enter 220ms var(--ease); }
 .listing-card a { margin-top: auto; font-size: 9px; color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
 .listing-cards-note { font: 8px var(--mono); color: #9aa28e; }
 .answer-basis { font-size: 9px; line-height: 1.6; color: #9aa28e; }
+.answer-grounding { margin: 6px 0 0; font-size: 11px; line-height: 1.5; color: #3d6436; }
+.answer-grounding::before { content: "\2713\00a0"; }
+.answer-grounding.warn { color: #8a4310; }
+.answer-grounding.warn::before { content: "!\00a0"; font-weight: 700; }
 .provenance { color: var(--muted); }
 .provenance > summary { display: flex; align-items: center; gap: 5px; cursor: pointer; list-style: none; min-height: 22px; font: 8px var(--mono); letter-spacing: .3px; }
 .provenance > summary::-webkit-details-marker { display: none; }
@@ -393,6 +397,8 @@ dialog[open] { animation: dialog-enter 220ms var(--ease); }
   .recenter { display: none; }
   .map-compass { right: 24px; top: 25px; }
   .city-tray { bottom: 89px; right: 15px; left: 15px; width: auto; padding: 14px 18px 12px; }
+  /* The map controls sit at fixed offsets above the tray; the stat label carries the caveat here. */
+  .tray-note { display: none; }
   .city-tray h2 { font-size: 28px; margin-top: 7px; }
   .tray-content { min-height: 105px; }
   .tray-price { margin: 12px 0; font-size: 23px; }
