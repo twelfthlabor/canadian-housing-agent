@@ -8,6 +8,7 @@ import {
   loadCases,
   parseCaseLine,
   qualityGatePassed,
+  resumableRows,
   runAgentCase,
 } from "../evals/run";
 import { collectGroundTruth } from "../lib/grounding";
@@ -417,8 +418,8 @@ describe("eval case parsing", () => {
 
   it("parses every shipped case, including the multi-turn and capability additions", () => {
     const cases = loadCases();
-    expect(cases).toHaveLength(52);
-    expect(cases.filter((c) => c.turns).map((c) => c.id)).toEqual(["MT01", "MT02", "MT03", "MT04"]);
+    expect(cases).toHaveLength(58);
+    expect(cases.filter((c) => c.turns).map((c) => c.id)).toEqual(["MT01", "MT02", "MT03", "MT04", "H04"]);
     expect(cases.find((c) => c.id === "C01")?.expect).toEqual({
       tool: "city_snapshot",
       args: { city: "toronto", beds: 2, maxPrice: 700_000 },
@@ -677,6 +678,7 @@ describe("eval report", () => {
     "finished_at",
     "grounding_rate",
     "mode",
+    "model",
     "plumbing_only",
     "provider",
     "quality_gate_passed",
@@ -704,5 +706,24 @@ describe("eval report", () => {
     expect(final.complete_suite).toBe(true);
     // This fixture scores 0/2, so even the complete report cannot pass the gate.
     expect(final.quality_gate_passed).toBe(false);
+  });
+});
+
+describe("resumableRows", () => {
+  const row = (id: string, detail = "ok", answer = "An answer.") => ({
+    id, category: "tool_choice" as const, passed: true, detail, turnCount: 1, answer, tool_events: [],
+  });
+  const report = (model: string | null, mode: "live" | "mock", cases: ReturnType<typeof row>[]) =>
+    ({ ...buildReport(cases, { isMock: mode === "mock", providerName: "groq", startedAt: new Date(0), completeSuite: false, model }), mode });
+
+  it("keeps completed rows from the same live model and drops errors, empty answers and removed cases", () => {
+    const previous = report("m1", "live", [row("A"), row("B", "error: provider down"), row("C", "ok", ""), row("GONE")]);
+    expect(resumableRows(previous, "m1", ["A", "B", "C"]).map((r) => r.id)).toEqual(["A"]);
+  });
+
+  it("keeps nothing from another model, a mock run, or no report", () => {
+    expect(resumableRows(report("m1", "live", [row("A")]), "m2", ["A"])).toEqual([]);
+    expect(resumableRows(report(null, "mock", [row("A")]), "m1", ["A"])).toEqual([]);
+    expect(resumableRows(null, "m1", ["A"])).toEqual([]);
   });
 });

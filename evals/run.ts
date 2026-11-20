@@ -29,13 +29,13 @@
  * no dataset number is hardcoded.
  */
 
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { GENERIC_ERROR_MESSAGES, runAgent } from "../lib/agent";
 import type { AgentInputMessage } from "../lib/agent";
-import { createMockProvider, getProvider } from "../lib/providers";
+import { DEFAULT_GROQ_MODEL, createMockProvider, getProvider } from "../lib/providers";
 import type { Provider } from "../lib/providers";
 import { TOOL_IMPLS, citySnapshot, findDeals, searchListings } from "../lib/tools";
 import type { CitySnapshot } from "../lib/types";
@@ -142,10 +142,10 @@ const CASES_PATH = path.join(here, "cases.jsonl");
  * CLI
  * ---------------------------------------------------------------------- */
 
-type Flags = { limit?: number; category?: Category; ids?: string[]; mock: boolean; help: boolean };
+type Flags = { limit?: number; category?: Category; ids?: string[]; mock: boolean; help: boolean; resume: boolean };
 
 function parseFlags(argv: string[]): Flags {
-  const flags: Flags = { mock: false, help: false };
+  const flags: Flags = { mock: false, help: false, resume: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") {
@@ -154,6 +154,10 @@ function parseFlags(argv: string[]): Flags {
     }
     if (arg === "--mock") {
       flags.mock = true;
+      continue;
+    }
+    if (arg === "--resume") {
+      flags.resume = true;
       continue;
     }
     if (arg === "--ids" || arg.startsWith("--ids=")) {
@@ -204,6 +208,7 @@ function usage(): void {
   npm run evals                                live, needs GROQ_API_KEY
   npm run evals -- --category numeric          run one category
   npm run evals -- --limit 5                   run the first N cases
+  npm run evals -- --resume                    keep completed rows from the last live report for the same model, run the rest
   npm run evals -- --ids T01,D01               run only the named case ids
   npm run evals -- --mock                      force the mock provider
 
@@ -706,6 +711,8 @@ type EvalReport = {
   mode: "mock" | "live";
   plumbing_only: boolean;
   provider: string;
+  /** Primary model id for live runs; null for mock runs. */
+  model: string | null;
   started_at: string;
   finished_at: string;
   totals: {
@@ -741,7 +748,7 @@ function scoreOf(cases: CaseReport[], category: Category): number | null {
  */
 export function buildReport(
   cases: CaseReport[],
-  options: { isMock: boolean; providerName: string; startedAt: Date; completeSuite: boolean },
+  options: { isMock: boolean; providerName: string; startedAt: Date; completeSuite: boolean; model?: string | null },
 ): EvalReport {
   const scores = {
     tool_accuracy: scoreOf(cases, "tool_choice"),
@@ -768,6 +775,7 @@ export function buildReport(
     mode: options.isMock ? "mock" : "live",
     plumbing_only: options.isMock,
     provider: options.providerName,
+    model: options.isMock ? null : options.model ?? null,
     started_at: options.startedAt.toISOString(),
     finished_at: new Date().toISOString(),
     totals,
@@ -775,6 +783,25 @@ export function buildReport(
     grounding_rate: groundingRate(cases),
     cases,
   };
+}
+
+/**
+ * Rows a --resume run keeps from the previous report: same live model, a case that
+ * still exists, and an answer that completed (provider errors and empty answers rerun).
+ */
+export function resumableRows(previous: EvalReport | null, model: string, caseIds: string[]): CaseReport[] {
+  if (!previous || previous.mode !== "live" || previous.model !== model) return [];
+  const wanted = new Set(caseIds);
+  return previous.cases.filter((row) => wanted.has(row.id) && row.answer.trim() !== "" && !row.detail.startsWith("error:"));
+}
+
+function readPreviousReport(): EvalReport | null {
+  if (!existsSync(REPORT_PATH)) return null;
+  try {
+    return JSON.parse(readFileSync(REPORT_PATH, "utf8")) as EvalReport;
+  } catch {
+    return null;
+  }
 }
 
 /** Atomic write: a hard kill mid-write leaves the previous report, never a truncated one. */
@@ -867,6 +894,13 @@ async function main(): Promise<number> {
   }
 
   const provider = isMock ? createMockProvider() : getProvider();
+  const model = process.env.GROQ_MODEL?.trim() || DEFAULT_GROQ_MODEL;
+  const kept = flags.resume && !isMock ? resumableRows(readPreviousReport(), model, selected.map((c) => c.id)) : [];
+  if (kept.length > 0) {
+    const keptIds = new Set(kept.map((row) => row.id));
+    selected = selected.filter((c) => !keptIds.has(c.id));
+    console.log(`resume: keeping ${kept.length} completed case(s) from the last ${model} report`);
+  }
   const delayMs = isMock ? 0 : envDelayMs();
   const startedAt = new Date();
 
@@ -883,15 +917,16 @@ async function main(): Promise<number> {
     }\n`,
   );
 
-  const fullSuite = selected.length === allCases.length;
+  const fullSuite = selected.length + kept.length === allCases.length;
   const reportMeta = (completeSuite: boolean) => ({
     isMock,
     providerName: provider.name,
+    model,
     startedAt,
     completeSuite,
   });
 
-  const reportCases: CaseReport[] = [];
+  const reportCases: CaseReport[] = [...kept];
   for (const [index, evalCase] of selected.entries()) {
     let outcome = await runAgentCase(evalCase, provider);
     // Free-tier rate limits surface as an empty answer with an error. Wait and retry
