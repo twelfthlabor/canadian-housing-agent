@@ -474,7 +474,7 @@ class PureHelpers(unittest.TestCase):
     def test_default_source_is_relative(self):
         self.assertFalse(MODULE.DEFAULT_SOURCE.is_absolute())
         self.assertNotIn("/Users/", str(MODULE.DEFAULT_SOURCE))
-        self.assertEqual(str(MODULE.DEFAULT_SOURCE), "../property-scraper/data/regions")
+        self.assertEqual(MODULE.DEFAULT_SOURCE.as_posix(), "../property-scraper/data/regions")
 
 
 if __name__ == "__main__":
