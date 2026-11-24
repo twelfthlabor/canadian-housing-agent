@@ -20,7 +20,8 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   go to stderr. Read-only tools, no model calls.
 - `npm run evals`: live, loads `.env.local` with Node 24, needs `GROQ_API_KEY`, sequential with `EVAL_DELAY_MS` default 2500.
   `MOCK_LLM=1 npm run evals`: plumbing only, no network, exit 0. Flags: `--category`, `--limit`, `--ids T01,D01`, `--mock`,
-  `--resume` (keep completed rows from the last live report for the same model, run the rest). `GROQ_MODEL=<id>`
+  `--resume` (keep completed rows from the last live report for the same model, run the rest), `--rescore` (re-score
+  the saved answers in the last live report with the current checks, re-running only the deterministic tools). `GROQ_MODEL=<id>`
   runs the suite on another model; the report records `model`. Live runs retry a case up to twice (45s wait) when the
   provider returns an error, so rate limits are not scored as model failures. Writes `evals/report.json` (gitignored)
   after every case. 58 golden cases (27 tool choice including multi-turn MT01-MT04 and H04, capability cases
@@ -29,7 +30,7 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   gated) `grounding_rate`. Mock scores are not a quality signal. Only a live report covering every case can pass the
   gate. Multi-turn cases score the final turn and require a tool on the first; `anyOf` lists alternatives; a
   `refusal`-type check doubles as a required-phrase check in non-refusal cases (H05, H06). Last completed
-  full-suite pass: the 32-case gate (2026-09-16); the 58-case suite has not completed a live run.
+  full-suite pass: 58/58 on `openai/gpt-oss-120b` (2026-11-23), grounding_rate 1.0 over 229 figures.
 
 ## Environment
 

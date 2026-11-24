@@ -6,12 +6,14 @@ import {
   evaluateCaseOutcome,
   expectedArgsFailure,
   loadCases,
+  outcomeFromRow,
   parseCaseLine,
   qualityGatePassed,
   resumableRows,
   runAgentCase,
 } from "../evals/run";
 import { collectGroundTruth } from "../lib/grounding";
+import { TOOL_IMPLS } from "../lib/tools";
 import { createMockProvider } from "../lib/providers";
 import type { ChatMessage, Provider } from "../lib/providers";
 import { citySnapshot } from "../lib/tools";
@@ -725,5 +727,22 @@ describe("resumableRows", () => {
     expect(resumableRows(report("m1", "live", [row("A")]), "m2", ["A"])).toEqual([]);
     expect(resumableRows(report(null, "mock", [row("A")]), "m1", ["A"])).toEqual([]);
     expect(resumableRows(null, "m1", ["A"])).toEqual([]);
+  });
+});
+
+describe("outcomeFromRow (--rescore)", () => {
+  it("re-scores a saved live answer with the current checks", () => {
+    const c = loadCases().find((item) => item.id === "MN02")!;
+    const args = { downPct: 20, householdIncome: 150000, ratePct: 4.5 };
+    const { maxAffordablePrice } = TOOL_IMPLS.mortgage_estimate(args) as { maxAffordablePrice: number };
+    const price = maxAffordablePrice.toLocaleString("en-CA").replace(/,/g, " ");
+    const row = {
+      id: "MN02", category: "numeric" as const, passed: false, detail: "numeric: expected value not found", turnCount: 1,
+      answer: `You could afford up to **≈ $${price}** with 20 % down at 4.5 % on a $150 k income.`,
+      tool_events: [{ name: "mortgage_estimate", args }],
+    };
+    const rescored = buildCaseReport(c, outcomeFromRow(c, row));
+    expect(rescored.passed).toBe(true);
+    expect(rescored.ungrounded).toEqual([]);
   });
 });
