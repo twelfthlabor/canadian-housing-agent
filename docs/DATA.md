@@ -70,8 +70,9 @@ Applied during the build:
    K/L/M/N/P=ON, R=MB, S=SK, T=AB, V=BC, X=NT/NU, Y=YT). A mismatch becomes
    `null`; the row is kept and counted as `fsa/province mismatch (nulled)`
    (24 in this build, never a drop).
-7. **Emit twelve fields**: `city`, `province`, `fsa`, `price`, `beds`, `baths`,
-   `sqft`, `seen`, `address`, `url`, plus `estValue` and `discountPct` from the
+7. **Emit thirteen fields**: `city`, `province`, `fsa`, `price`, `beds`, `baths`,
+   `sqft`, `seen`, `address`, `url`, `type` (the scraper CSV's Zillow homeType,
+   or null), plus `estValue` and `discountPct` from the
    valuation pass (see [Valuation](#valuation-hmb-v1)). Listing ids and agent
    names are not written; scraped source pages are not published. `province` is
    the 2-letter directory-suffix code (authoritative, never parsed from the
@@ -92,6 +93,7 @@ Applied during the build:
 | `seen` | Date the source last saw the listing (ISO date). |
 | `address` | Full address as listed, including city, province code and postal code. |
 | `url` | Link to the source listing (https). |
+| `type` | Zillow homeType (`SINGLE_FAMILY`, `TOWNHOUSE`, `CONDO`, `APARTMENT`, `MULTI_FAMILY`, `LOT`, `MANUFACTURED`), or `null`. Taken from the scraper CSV when it has a `type` column, else backfilled by `pipeline/enrich_types.py` from the scraper's tile cache by zpid. 23,793 of 54,658 rows (43.5%, 44 cities) are typed today. Not used by the hmb-v1 estimate; `find_deals` uses it for the same-type check. |
 | `estValue` | Positive integer CAD rounded to the nearest $1,000: the hmb-v1 estimate of the typical asking price for comparable listings (same city/FSA/bed/bath mix), computed from this sample's asking prices. `null` in cities with fewer than 30 rows. See [Valuation](#valuation-hmb-v1). |
 | `discountPct` | One decimal; positive when the asking price is below `estValue`. `null` exactly when `estValue` is null. |
 
@@ -102,7 +104,7 @@ City lookups accept natural spellings (e.g. "St. Catharines", "Sault Ste. Marie"
 ## CSV export
 
 `GET /api/listings?format=csv` returns all 54,658 rows with the header
-`city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct`.
+`city,province,fsa,price,beds,baths,sqft,seen,address,url,type,estValue,discountPct`.
 A `null` field (for example `fsa`, or an estimate in a small city) becomes an
 empty cell. Values are quoted per
 RFC 4180 when they contain commas, quotes, or line breaks, and cells that start
@@ -204,9 +206,12 @@ a human clears it in the attach Chrome and the next run resumes the queue.
   comparable asking prices only: no sold prices, property type, condition, lot,
   or year-built data. Out-of-fold MdAPE is 19% on this snapshot, so a 20%
   gap is inside the model's noise; that is why deals need twice the city's
-  error. Without property type, a large gap can still be a condo, mobile home
-  or land lease compared with houses, so every deal should be checked against
-  its listing.
+  error. The estimate also mixes property types, so where a deal's `type` is
+  known and at least 5 same-city, same-type, same-bedroom listings exist, the
+  discount must also hold against their median. Of the 895 typed deals in the
+  window, 579 failed that check and are no longer called deals. Deals without
+  a type (most of them) can still be a condo or mobile home compared with
+  houses, so every deal should be checked against its listing.
 - **Valuation coarseness.** Estimates are group medians; rows in cities with
   fewer than 30 listings get none (208 rows in 19 cities today), and small
   cities are valued from few comparables, so their estimates are coarse.

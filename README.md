@@ -24,9 +24,12 @@ Not an appraisal service, listing service, or source of financial advice. See
 - **Deals have to clear the model's own error.** `find_deals` only calls a
   listing a deal when its gap to the comparable-listings estimate is at least
   twice that city's typical estimate error (out-of-fold MdAPE) and at most 50%.
-  In Hamilton that is 69 listings instead of the 425 a flat 20% threshold
-  produced; where the estimate is too noisy, the tool returns no deals and says
-  why.
+  Where the property type is known, the discount must also hold against
+  same-city, same-type, same-bedroom listings, because the estimate mixes
+  condos and houses: of 895 typed deals, 579 were only cheap next to another
+  property type. In Hamilton that leaves 38 deals instead of the 425 a flat
+  20% threshold produced; where the estimate is too noisy, the tool returns no
+  deals and says why.
 - **Small samples are labelled.** 48 of 123 cities have fewer than 100
   listings. Their medians carry a small-sample flag in the tool result, a
   caveat in the answer, a dashed label on the map, and no headline label at all
@@ -38,8 +41,8 @@ Not an appraisal service, listing service, or source of financial advice. See
 
 | Check | Result |
 | --- | --- |
-| Unit and route tests (`npm test`) | 246 passing |
-| Pipeline tests (`python -m unittest discover -s pipeline/tests`) | 36 passing |
+| Unit and route tests (`npm test`) | 253 passing |
+| Pipeline tests (`python -m unittest discover -s pipeline/tests`) | 40 passing |
 | Mobile Lighthouse (accessibility / best practices / SEO) | 100 / 100 / 100 |
 | Live eval, 58 cases on `openai/gpt-oss-120b` | not yet completed on the current suite (see below) |
 
@@ -49,20 +52,22 @@ runs in parts with `--resume`. The last completed full live pass was the
 
 ## How strict the check is
 
-Measured on real tool results for the 20 largest cities: each returned price
+Measured on real tool results for the 20 largest cities: each returned figure
 was moved up and down by 5%, 10% and 20%, rounded to the nearest $1,000, and
-put through the same check.
+put through the same check, written the way the agent writes it (listing
+prices next to the listing's address). Every unmodified figure was accepted.
 
 | Tool result | Wrong figure still accepted (±5% / ±10% / ±20%) |
 | --- | --- |
 | `city_snapshot` | 4.4% / 8.1% / 3.8% |
-| `search_listings` (25 listings) | 54.8% / 45.7% / 36.8% |
-| `find_deals` (25 listings with estimates) | 33.4% / 31.2% / 30.3% |
+| `search_listings` (25 listings) | 5.6% / 4.3% / 3.5% |
+| `find_deals` (25 listings with estimates) | 0.1% / 0.0% / 0.0% |
 
-For city statistics the check catches more than nine in ten wrong figures. For
-listing results it is weak: with dozens of prices in a result, a wrong price is
-often within 1% of some other listing's price. Tying each quoted price to the
-listing it is quoted for would close that gap.
+A line or sentence that names a listing's address is checked against that
+listing's own figures and the result's shared totals only; before that rule,
+listing results let 30-55% of wrong prices through because some other
+listing's price was usually within 1%. A price quoted without its address is
+still matched against every number in the result.
 
 ## What the agent can do
 
@@ -146,7 +151,8 @@ property-scraper/  (separate repo; read-only here)
         |
         v
 pipeline/build_dataset.py   dedupe by listing id -> filter -> extract FSA -> hmb-v1
-                            valuation -> write twelve fields (incl. estValue/discountPct)
+                            valuation -> write thirteen fields (incl. type, estValue/discountPct)
+pipeline/enrich_types.py    backfills property type from the scraper cache
         |
         v
 data/listings.json          54,658 listings incl. province, address, source URL,

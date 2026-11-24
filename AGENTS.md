@@ -56,6 +56,11 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   emits `{type:"grounding",checked,ungrounded}` before `done`; the chat route recomputes it on cache replays. Any
   figure the prompt or a tool description tells the model to state must appear in the tool result (for example
   `gdsLimitPct`, `noiseFloorPct`, `thinSampleThreshold`), or the check will flag it.
+- Same-type check (`sameTypeDiscountPct`/`passesTypeCheck` in `lib/tools.ts`): a typed listing with 5+ same-city,
+  same-type, same-bedroom peers must also be at least the deal threshold below their median price; `find_deals`
+  reports `excludedByType` and `typeChecked`, and `/api/listings?sort=discount` applies the same rule.
+- `lib/grounding.ts` also anchors figures to listings: a line or sentence that names a listing's street address
+  (unit numbers ignored) is checked against that listing's own fields plus shared totals, not every listing's prices.
 - `lib/deals.ts` and `lib/sample.ts` hold the deal window (floor = max(dataset threshold, ceil(2 x city MdAPE)), cap
   50%) and the small-sample thresholds (100 for a caveat, 30 for a map label). They import no data, so client
   components use them too.
@@ -124,8 +129,10 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   `find_deals` and `/api/listings` read at runtime. `build_dataset.py` runs it in the same refresh: no extra step,
   dependency, or network call.
 - Rows in `data/listings.json` are exactly
-  `{city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct}` (54,658 rows, 123 cities, 11
-  provinces). `estValue` is a positive integer CAD rounded to the nearest $1,000; `discountPct` has one decimal and is
+  `{city,province,fsa,price,beds,baths,sqft,seen,address,url,type,estValue,discountPct}` (54,658 rows, 123 cities, 11
+  provinces). `type` is Zillow's homeType or null (43.5% typed): `build_dataset.py` carries the scraper CSV's `type`
+  column, and `pipeline/enrich_types.py --cache <scraper>/cache --data data` backfills by zpid without erasing CSV
+  values; `canada_refresh.sh` runs it after the build when the cache exists. `estValue` is a positive integer CAD rounded to the nearest $1,000; `discountPct` has one decimal and is
   positive when the asking price is below the estimate; both are null for listings in cities with fewer than 30 rows
   (208 rows in 19 cities today). Address and source URL are intentionally published; never reintroduce `listing_id`, agent names, or
   scraped source pages into tracked data. `sqft` outside 200-20,000 is nulled (land acreage bug); per-city `medianSqft`
@@ -137,7 +144,7 @@ live in README.md, docs/PLAN.md, and docs/DATA.md; don't duplicate them here.
   `minDiscount` defaulting to the valuation meta threshold, clamped 0-50, and raised per row to that city's noise floor), `limit` (default 100, capped at 200) and
   `offset`. Invalid filter values are ignored, not errors. `parseFilters` and `queryListings` are the pure core. Or
   `?format=csv` returning all rows with the header
-  `city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct` (`null` -> empty cell; RFC 4180
+  `city,province,fsa,price,beds,baths,sqft,seen,address,url,type,estValue,discountPct` (`null` -> empty cell; RFC 4180
   quoting, formula-looking cells prefixed with `'`, serialized once per server process).
 - Atlas URL state (`components/Workspace.tsx`): city, compare, sort, max, tab, and view are mirrored with one-way
   `replaceState`; defaults are omitted, `max` snaps to the 50k slider step, and unknown params fall back to defaults.
