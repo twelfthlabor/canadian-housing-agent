@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { listings } from "@/lib/dataset";
-import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, cityDealFloorPct, defaultMinDiscountPct } from "@/lib/tools";
+import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, cityDealFloorPct, defaultMinDiscountPct, passesTypeCheck } from "@/lib/tools";
 import type { Listing } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ export function csvCell(value: string | number | null): string {
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-const CSV_HEADER = "city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct";
+const CSV_HEADER = "city,province,fsa,price,beds,baths,sqft,seen,address,url,type,estValue,discountPct";
 
 export const csvRow = (row: Listing): string =>
   [
@@ -47,6 +47,7 @@ export const csvRow = (row: Listing): string =>
     row.seen,
     row.address ?? "",
     row.url ?? "",
+    row.type ?? null,
     row.estValue ?? null,
     row.discountPct ?? null,
   ]
@@ -133,7 +134,8 @@ export function queryListings(rows: Listing[], filters: ListingFilters): { total
         row.price >= DEAL_MIN_PRICE &&
         // Each city keeps its own noise floor, so a national view does not call estimate error a deal.
         row.discountPct >= Math.max(filters.minDiscount, cityDealFloorPct(row.city)) &&
-        row.discountPct <= MAX_DISCOUNT_PCT
+        row.discountPct <= MAX_DISCOUNT_PCT &&
+        passesTypeCheck(row, Math.max(filters.minDiscount, cityDealFloorPct(row.city)))
       );
     }
     return true;

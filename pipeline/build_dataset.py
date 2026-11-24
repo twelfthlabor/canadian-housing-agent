@@ -323,6 +323,12 @@ def dedupe(source: Path) -> tuple[dict[str, tuple], dict, list[Path]]:
     return records, stats, csv_paths
 
 
+def normalize_type(value) -> str | None:
+    """Zillow homeType as written by the scraper ("SINGLE_FAMILY", "CONDO", ...); None when absent."""
+    text = re.sub(r"[^A-Z_]", "", str(value or "").strip().upper().replace(" ", "_"))
+    return text or None
+
+
 def transform(records: dict[str, tuple]) -> tuple[list[dict], dict[str, int], dict[str, int], int]:
     drops = {"non_ca": 0, "price_low": 0, "price_bad": 0, "beds_bad": 0}
     nulled = {"sqft_implausible": 0}
@@ -364,6 +370,7 @@ def transform(records: dict[str, tuple]) -> tuple[list[dict], dict[str, int], di
                 "seen": seen_date(row.get("scraped_at")),
                 "address": address,
                 "url": (row.get("url") or "").strip(),
+                "type": normalize_type(row.get("type")),
             }
         )
     listings.sort(

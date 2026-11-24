@@ -114,22 +114,79 @@ export function checkedFigures(text: string): Extracted[] {
   });
 }
 
+type ListingRef = { street: string; truth: number[] };
+
+/** Street part of an address, lower-cased, without unit numbers or punctuation: "11 pirie dr". */
+function streetKey(text: string): string {
+  return text.toLowerCase().replace(/#\s*\w+|\bunit\s+\w+/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Each listing in the tool results with the numbers that belong to it alone. */
+function collectListings(value: unknown, into: ListingRef[]): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectListings(item, into);
+  } else if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.address === "string") {
+      const street = streetKey(record.address.split(",")[0]);
+      const truth: number[] = [];
+      collectGroundTruth(record, truth);
+      if (street) into.push({ street, truth });
+      return;
+    }
+    for (const item of Object.values(record)) collectListings(item, into);
+  }
+}
+
+/** Numbers outside any listing: counts, thresholds and city statistics shared by the whole answer. */
+function collectShared(value: unknown, into: number[]): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectShared(item, into);
+  } else if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.address === "string") return;
+    for (const [key, item] of Object.entries(record)) {
+      if (item && typeof item === "object") collectShared(item, into);
+      else collectGroundTruth({ [key]: item }, into);
+    }
+  } else {
+    collectGroundTruth(value, into);
+  }
+}
+
+// Sentence breaks, except after street and estimate abbreviations ("Dr.", "est.").
+const SENTENCE_BREAK = /(?<!\b(?:St|Dr|Rd|Ave|Blvd|Cres|Ct|Pl|Ln|Hwy|est|Est|approx|vs|No))(?<=[.!?])\s+(?=[A-Z0-9*])/;
+
 export function checkGrounding(input: {
   answer: string;
   toolResults: unknown[];
   messages: string[];
 }): GroundingResult {
-  const grounded: number[] = [];
-  for (const result of input.toolResults) collectGroundTruth(result, grounded);
-  for (const message of input.messages) collectGroundTruth(message, grounded);
+  const shared: number[] = [];
+  for (const result of input.toolResults) collectShared(result, shared);
+  for (const message of input.messages) collectGroundTruth(message, shared);
+  const listings: ListingRef[] = [];
+  collectListings(input.toolResults, listings);
+  const everything = [...shared, ...listings.flatMap((listing) => listing.truth)];
   const addressNumbers: number[] = [];
   collectAddressNumbers(input.toolResults, addressNumbers);
 
+  let checked = 0;
+  const ungrounded: string[] = [];
   // Listing URLs carry ids and slugs with digits; they are links, not figures.
-  const figures = checkedFigures(input.answer.replace(/https?:\/\/\S+/g, " "));
-  const ungrounded = figures
-    .filter((n) => !isGrounded(n, grounded))
-    .filter((n) => !(n.kind === "plain" && addressNumbers.includes(n.value)))
-    .map((n) => n.raw);
-  return { checked: figures.length, ungrounded };
+  const text = input.answer.replace(/https?:\/\/\S+/g, " ");
+  for (const segment of text.split("\n").flatMap((line) => line.split(SENTENCE_BREAK))) {
+    // A segment that names a listing may only quote that listing's figures plus shared totals.
+    const key = ` ${streetKey(segment)} `;
+    const named = listings.filter((listing) => key.includes(` ${listing.street} `));
+    const truth = named.length > 0 ? [...shared, ...named.flatMap((listing) => listing.truth)] : everything;
+    const figures = checkedFigures(segment);
+    checked += figures.length;
+    for (const n of figures) {
+      if (isGrounded(n, truth)) continue;
+      if (n.kind === "plain" && addressNumbers.includes(n.value)) continue;
+      ungrounded.push(n.raw);
+    }
+  }
+  return { checked, ungrounded };
 }

@@ -1,3 +1,34 @@
+# Project status: 2026-11-23 (per-listing grounding, property type)
+
+## What changed
+
+- Grounding is anchored to listings: a line or sentence naming a listing's
+  street address is checked against that listing's own figures plus shared
+  totals. Wrong listing prices (moved 5-20%) now pass 3.5-5.6% of the time in
+  search results and 0-0.1% in deal results, down from 30-55%; every correct
+  figure still passes.
+- Listings carry `type` (Zillow homeType). `build_dataset.py` takes it from the
+  scraper CSV; `pipeline/enrich_types.py` backfilled 23,793 of 54,658 rows
+  (43.5%, 44 cities) from the scraper's tile cache by zpid, and
+  `canada_refresh.sh` reruns it after each build.
+- `find_deals` and the Data tab's discount sort drop typed deals that are not
+  also below their same-city, same-type, same-bedroom median: 579 of 895 typed
+  deals in the window failed. Results report `excludedByType` and
+  `typeChecked`; chat cards show the type. Hamilton: 69 deals -> 38.
+- CSV export adds a `type` column.
+
+## Verified (2026-11-23, Windows, Node 24)
+
+- `npx vitest run`: 253 passed. `npx tsc --noEmit`: clean.
+  `python -m unittest discover -s pipeline/tests`: 40 passed.
+  `bash -n scripts/canada_refresh.sh`: clean (the script has no test suite).
+- Strictness measured as in the README table.
+
+## Not done
+
+- No live eval run: `.env.local` with `GROQ_API_KEY` is still missing.
+- 56.5% of listings have no type; their deals are not type-checked.
+
 # Project status: 2026-11-20 (grounding check, deal noise floor, small samples)
 
 ## What changed
