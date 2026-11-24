@@ -100,3 +100,34 @@ describe("isGrounded", () => {
     expect(isGrounded({ value: 60, kind: "percent", raw: "60%" }, [59.9])).toBe(true);
   });
 });
+
+describe("per-listing grounding", () => {
+  const search = {
+    city: "hamilton",
+    totalMatches: 2,
+    listings: [
+      { address: "11 Pirie Dr #19, Dundas, ON L9H 6Z6", price: 599900, estValue: 1186000, discountPct: 49.4, beds: 3 },
+      { address: "161 Berkindale Dr #8, Hamilton, ON L8E 1M6", price: 385000, estValue: 760000, discountPct: 49.3, beds: 3 },
+    ],
+  };
+
+  it("accepts a listing line quoting that listing's own figures and shared totals", () => {
+    const answer = "- 11 Pirie Dr #19, Dundas – $599,900, 49.4% below the $1,186,000 estimate (1 of 2 matches)";
+    expect(checkGrounding({ answer, toolResults: [search], messages: [] }).ungrounded).toEqual([]);
+  });
+
+  it("flags another listing's price quoted next to this listing's address", () => {
+    const answer = "- 11 Pirie Dr #19, Dundas – $385,000\n- 161 Berkindale Dr #8 – $385,000";
+    expect(checkGrounding({ answer, toolResults: [search], messages: [] }).ungrounded).toEqual(["$385,000"]);
+  });
+
+  it("matches an address written without its unit number", () => {
+    const answer = "161 Berkindale Dr asks $599,900.";
+    expect(checkGrounding({ answer, toolResults: [search], messages: [] }).ungrounded).toEqual(["$599,900"]);
+  });
+
+  it("keeps sentences about different listings apart within one paragraph", () => {
+    const answer = "11 Pirie Dr #19 asks $599,900. 161 Berkindale Dr #8 asks $385,000.";
+    expect(checkGrounding({ answer, toolResults: [search], messages: [] }).ungrounded).toEqual([]);
+  });
+});
