@@ -41,14 +41,18 @@ Not an appraisal service, listing service, or source of financial advice. See
 
 | Check | Result |
 | --- | --- |
-| Unit and route tests (`npm test`) | 253 passing |
+| Live eval, 58 cases on `openai/gpt-oss-120b` (2026-11-23) | 58/58: tool choice 1.00, numeric 1.00, refusals 1.00; quality gate passed |
+| Grounding on that run | 229 figures in 44 answers, every one traced to a tool result |
+| Unit and route tests (`npm test`) | 258 passing |
 | Pipeline tests (`python -m unittest discover -s pipeline/tests`) | 40 passing |
-| Mobile Lighthouse (accessibility / best practices / SEO) | 100 / 100 / 100 |
-| Live eval, 58 cases on `openai/gpt-oss-120b` | not yet completed on the current suite (see below) |
+| Mobile Lighthouse on production (accessibility / best practices / SEO) | 100 / 100 / 100 |
 
-The live suite needs a Groq key and spans the free-tier daily token cap, so it
-runs in parts with `--resume`. The last completed full live pass was the
-32-case gate on 2026-09-16.
+How the live result was reached: the first pass scored 56/58. One case hit a
+Groq service error; the other failure and four grounding flags were checker
+bugs, not model errors (gpt-oss writes a narrow no-break space as a thousands
+separator, "$763 000", and states a negative discount as "3.6% above"). After
+fixing the checker, `--rescore` re-scored the saved answers without new model
+calls (57/58) and `--resume` re-ran the service-error case live (58/58).
 
 ## How strict the check is
 
@@ -61,7 +65,7 @@ prices next to the listing's address). Every unmodified figure was accepted.
 | --- | --- |
 | `city_snapshot` | 4.4% / 8.1% / 3.8% |
 | `search_listings` (25 listings) | 5.6% / 4.3% / 3.5% |
-| `find_deals` (25 listings with estimates) | 0.1% / 0.0% / 0.0% |
+| `find_deals` (25 listings with estimates) | 0.1% / 0.0% / 0.1% |
 
 A line or sentence that names a listing's address is checked against that
 listing's own figures and the result's shared totals only; before that rule,
@@ -122,6 +126,7 @@ every figure traced to a tool result.
 ```bash
 npm run evals                                # full live run, needs GROQ_API_KEY
 npm run evals -- --resume                    # keep completed rows from the last report for the same model, run the rest
+npm run evals -- --rescore                   # re-score the last report's saved answers with the current checks (no model calls)
 GROQ_MODEL=<model id> npm run evals          # run the same suite on another Groq model; the report records the model
 npm run evals -- --category numeric          # one category (never passes the full-suite gate)
 ```

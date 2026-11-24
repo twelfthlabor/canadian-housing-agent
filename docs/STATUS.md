@@ -1,3 +1,27 @@
+# Project status: 2026-11-23, later (first full live eval)
+
+## Result
+
+58/58 on `openai/gpt-oss-120b`: tool choice 1.00, numeric 1.00, refusals
+1.00, quality gate passed. grounding_rate 1.0: 229 figures in 44 answers, all
+traced to a tool result.
+
+## How it got there
+
+- First live pass: 56/58. T02 hit a Groq service error three times. MN02
+  failed and M02, MN02, T12, MT02 were flagged, all from checker bugs: the
+  model writes U+202F as a thousands separator ("$763 000"), quotes the user's
+  "$800k" back, and states a discountPct of -3.6 as "3.6% above the estimate".
+- Fixed in `lib/grounding.ts` with tests built from those answers. Strictness
+  unchanged (see README); every correct figure still passes.
+- `npm run evals -- --rescore` (new) re-scored the saved answers: 57/58.
+  `--resume` re-ran T02 live: 58/58.
+
+## Verified
+
+- `npx vitest run`: 258 passed. `npx tsc --noEmit`: clean.
+  `python -m unittest discover -s pipeline/tests`: 40 passed.
+
 # Project status: 2026-11-23 (per-listing grounding, property type)
 
 ## What changed
