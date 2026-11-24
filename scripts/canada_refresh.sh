@@ -220,6 +220,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   if [ "$DO_PUBLISH" -eq 1 ]; then
     PUBLISH_REPORT="planned (dry-run)"
     echo "would run: (cd $APP_REPO && python3 pipeline/build_dataset.py)"
+    [ -d "$SCRAPER_REPO/cache" ] && echo "would run: (cd $APP_REPO && python3 pipeline/enrich_types.py --cache $SCRAPER_REPO/cache --data data)"
     echo "would run: (cd $APP_REPO && python3 -m unittest discover -s pipeline/tests -q)"
     echo "would run: (cd $APP_REPO && MOCK_LLM=1 npm test)"
     echo "would run: (cd $APP_REPO && git commit -m \"Refresh Canada listing dataset ($NEWEST_CSV_DATE scrape)\" -- data/listings.json data/market_summary.json && git push origin main)"
@@ -239,6 +240,11 @@ if [ "$DO_PUBLISH" -eq 1 ]; then
   if ! ( cd "$APP_REPO" && python3 pipeline/build_dataset.py ); then
     PUBLISH_REPORT="failed (build)"
     finish "failed (build)" 2
+  fi
+  # Backfill property types the scrape CSVs did not carry from the scraper's tile cache.
+  if [ -d "$SCRAPER_REPO/cache" ] && ! ( cd "$APP_REPO" && python3 pipeline/enrich_types.py --cache "$SCRAPER_REPO/cache" --data data ); then
+    PUBLISH_REPORT="failed (type backfill)"
+    finish "failed (type backfill)" 2
   fi
   if ! ( cd "$APP_REPO" && python3 -m unittest discover -s pipeline/tests -q ); then
     echo "failing command: (cd $APP_REPO && python3 -m unittest discover -s pipeline/tests -q)"

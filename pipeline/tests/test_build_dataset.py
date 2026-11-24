@@ -45,7 +45,7 @@ def report_number(output: str, label: str) -> int:
 
 # Fixture builds are far below MIN_CITY_ROWS, so every published estimate is
 # null; the 10 transformed fields still have to match exactly.
-EXPECTED_LISTINGS = [dict(row, estValue=None, discountPct=None) for row in [
+EXPECTED_LISTINGS = [dict(row, type=None, estValue=None, discountPct=None) for row in [
     {
         "city": "ottawa",
         "province": "ON",
@@ -223,11 +223,24 @@ class PipelineEndToEnd(unittest.TestCase):
                 set(row),
                 {
                     "city", "province", "fsa", "price", "beds", "baths", "sqft", "seen",
-                    "address", "url", "estValue", "discountPct",
+                    "address", "url", "type", "estValue", "discountPct",
                 },
             )
             self.assertTrue(row["address"])
             self.assertTrue(row["url"])
+
+    def test_normalize_type(self):
+        self.assertEqual(MODULE.normalize_type("SINGLE_FAMILY"), "SINGLE_FAMILY")
+        self.assertEqual(MODULE.normalize_type(" condo "), "CONDO")
+        self.assertEqual(MODULE.normalize_type("multi family"), "MULTI_FAMILY")
+        self.assertIsNone(MODULE.normalize_type(None))
+        self.assertIsNone(MODULE.normalize_type(""))
+
+    def test_transform_carries_type_column(self):
+        row = {"address": "1 King St W, Toronto, ON M5H 1A1", "price": "$800,000", "beds": "2", "baths": "1",
+               "sqft": "800", "url": "https://example.com/x", "scraped_at": "2026-09-01T00:00:00Z", "type": "CONDO"}
+        listings, _drops, _nulled, _mismatch = MODULE.transform({"x": ("t", 0, "toronto", "ON", row)})
+        self.assertEqual(listings[0]["type"], "CONDO")
 
     def test_valuation_nulls_are_paired(self):
         for row in self.listings:

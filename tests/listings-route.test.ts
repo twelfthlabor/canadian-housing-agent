@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { csvCell, csvDocument, csvRow, parseFilters, parseLimit, parseMinDiscount, queryListings, GET } from "../app/api/listings/route";
 import { listings, summary } from "../lib/dataset";
-import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, cityDealFloorPct, defaultMinDiscountPct } from "../lib/tools";
+import { DEAL_MIN_PRICE, MAX_DISCOUNT_PCT, cityDealFloorPct, defaultMinDiscountPct, passesTypeCheck } from "../lib/tools";
 import type { Listing } from "../lib/types";
 
 const listing: Listing = {
@@ -80,7 +80,7 @@ describe("csvCell", () => {
 describe("csvRow / csvDocument", () => {
   it("joins cells with commas and applies per-cell quoting", () => {
     expect(csvRow(listing)).toBe(
-      'ajax,ON,L1Z,495000,3,2,,2026-09-14,"18 Dexshire Dr, Ajax, ON ""A""",https://www.zillow.com/homedetails/x,500000,1',
+      'ajax,ON,L1Z,495000,3,2,,2026-09-14,"18 Dexshire Dr, Ajax, ON ""A""",https://www.zillow.com/homedetails/x,,500000,1',
     );
   });
 
@@ -90,6 +90,11 @@ describe("csvRow / csvDocument", () => {
     expect(row).toMatch(/,,$/);
   });
 
+  it("writes the property type, empty when unknown", () => {
+    expect(csvRow({ ...listing, type: "CONDO" })).toContain(",https://www.zillow.com/homedetails/x,CONDO,500000,");
+    expect(csvRow({ ...listing, type: null })).toContain(",https://www.zillow.com/homedetails/x,,500000,");
+  });
+
   it("guards a negative discountPct so the CSV cell is text", () => {
     expect(csvRow({ ...listing, discountPct: -520.1 })).toMatch(/,500000,'-520\.1$/);
   });
@@ -97,7 +102,7 @@ describe("csvRow / csvDocument", () => {
   it("joins the header and rows with CRLF and ends with CRLF", () => {
     const document = csvDocument([listing]);
     expect(document.split("\r\n")).toEqual([
-      "city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct",
+      "city,province,fsa,price,beds,baths,sqft,seen,address,url,type,estValue,discountPct",
       csvRow(listing),
       "",
     ]);
@@ -108,7 +113,7 @@ describe("csvRow / csvDocument", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/csv");
     expect((await response.text()).split("\r\n")[0]).toBe(
-      "city,province,fsa,price,beds,baths,sqft,seen,address,url,estValue,discountPct",
+      "city,province,fsa,price,beds,baths,sqft,seen,address,url,type,estValue,discountPct",
     );
   });
 });
@@ -123,7 +128,8 @@ function expectedDeals(city: string, minDiscount = defaultMinDiscountPct()): Lis
         row.discountPct !== null &&
         row.price >= DEAL_MIN_PRICE &&
         row.discountPct >= Math.max(minDiscount, cityDealFloorPct(row.city)) &&
-        row.discountPct <= MAX_DISCOUNT_PCT,
+        row.discountPct <= MAX_DISCOUNT_PCT &&
+        passesTypeCheck(row, Math.max(minDiscount, cityDealFloorPct(row.city))),
     )
     .sort(
       (a, b) =>

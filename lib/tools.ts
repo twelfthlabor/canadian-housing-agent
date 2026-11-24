@@ -68,6 +68,19 @@ for (const listing of listings) {
   else byCity.set(key, [listing]);
 }
 
+/** Typed comparables need at least this many same-city, same-type, same-bedroom listings. */
+export const MIN_TYPE_COMPS = 5;
+
+function typeKey(row: Listing): string | null {
+  return row.type ? `${row.city.toLowerCase()}|${row.type}|${row.beds ?? "?"}` : null;
+}
+
+const typePrices = new Map<string, number[]>();
+for (const listing of listings) {
+  const key = typeKey(listing);
+  if (key) typePrices.set(key, [...(typePrices.get(key) ?? []), listing.price]);
+}
+
 function medianOfSorted(values: number[]): number | null {
   const count = values.length;
   if (count === 0) return null;
@@ -324,6 +337,25 @@ export function rankAreas(query: RankAreasQuery): RankAreasResult | null {
 }
 
 /** An estimate is usable only when the pipeline wrote both fields. */
+/**
+ * The comparable-listings estimate mixes property types, so a condo can look like a deal
+ * next to houses. When a listing's type is known and its same-city, same-type,
+ * same-bedroom group has MIN_TYPE_COMPS or more listings, the discount must also hold
+ * against that group's median. Listings without a type or enough typed comparables pass.
+ */
+export function sameTypeDiscountPct(row: Listing): number | null {
+  const key = typeKey(row);
+  const prices = key ? typePrices.get(key) : undefined;
+  if (!prices || prices.length < MIN_TYPE_COMPS) return null;
+  const median = medianOfSorted([...prices].sort((a, b) => a - b)) as number;
+  return Math.round(((median - row.price) / median) * 1000) / 10;
+}
+
+export function passesTypeCheck(row: Listing, minDiscount: number): boolean {
+  const typed = sameTypeDiscountPct(row);
+  return typed === null || typed >= minDiscount;
+}
+
 function hasUsableEstimate(row: Listing): boolean {
   return (
     typeof row.estValue === "number" &&
@@ -358,11 +390,12 @@ export function findDeals(query: FindDealsQuery): FindDealsResult | null {
     considered.push(row);
   }
 
-  const matches = tooNoisy
+  const inWindow = tooNoisy
     ? []
     : considered.filter(
         (row) => (row.discountPct as number) >= minDiscount && (row.discountPct as number) <= MAX_DISCOUNT_PCT,
       );
+  const matches = inWindow.filter((row) => passesTypeCheck(row, minDiscount));
   const sorted = matches
     .slice()
     .sort(
@@ -383,6 +416,8 @@ export function findDeals(query: FindDealsQuery): FindDealsResult | null {
     typicalErrorPct,
     noiseFloorPct,
     maxDiscountPct: MAX_DISCOUNT_PCT,
+    excludedByType: inWindow.length - matches.length,
+    typeChecked: matches.filter((row) => sameTypeDiscountPct(row) !== null).length,
     ...(tooNoisy
       ? { note: `Estimates in this city typically err by ${typicalErrorPct}%, so no discount up to the ${MAX_DISCOUNT_PCT}% maximum clears ${NOISE_MULTIPLE} times that error.` }
       : requested !== undefined && requested < noiseFloorPct
@@ -602,7 +637,7 @@ export const TOOL_SPECS = [
         `Find listings asking below the comparable-listings estimate: an offline estimate of the typical asking price for similar listings, computed from this sample's comparable asking prices. It is not sold prices, an appraisal, or a prediction. ` +
         `The deal window is a price of at least $${DEAL_MIN_PRICE.toLocaleString("en-CA")} and a discount in [minDiscount, ${MAX_DISCOUNT_PCT}]; rows outside it are not returned. ` +
         `Returns city, the applied minDiscount, considered (scoped listings with a usable estimate and a price at or above the ${DEAL_MIN_PRICE.toLocaleString("en-CA")} deal floor), totalMatches (considered listings with discountPct in range), and the top deals sorted by discountPct descending. ` +
-        `discountPct is the percent below the estimate (positive = asking below). Discounts inside the model's noise margin are not meaningful: estimates typically err by ${overallMdapeText()}, per-city error is shown in the app and can be much higher in small cities. By default minDiscount is the city's noise floor, ${NOISE_MULTIPLE} times its typical error (returned as noiseFloorPct and typicalErrorPct); when that floor is above the maximum the city returns no deals and a note says why. Discounts above the ${MAX_DISCOUNT_PCT}% maximum are treated as model artefacts and excluded. When the result has a note, state it. The estimate does not know property type, so a large gap can be a condo, mobile home or land lease compared with houses: tell the user to check the listing. ` +
+        `discountPct is the percent below the estimate (positive = asking below). Discounts inside the model's noise margin are not meaningful: estimates typically err by ${overallMdapeText()}, per-city error is shown in the app and can be much higher in small cities. By default minDiscount is the city's noise floor, ${NOISE_MULTIPLE} times its typical error (returned as noiseFloorPct and typicalErrorPct); when that floor is above the maximum the city returns no deals and a note says why. Discounts above the ${MAX_DISCOUNT_PCT}% maximum are treated as model artefacts and excluded. When the result has a note, state it. The estimate mixes property types, so where a listing's type is known (about 44% of the sample) and at least ${MIN_TYPE_COMPS} same-city, same-type, same-bedroom listings exist, the discount must also hold against their median; excludedByType counts deals removed that way and typeChecked counts returned deals that passed it. Deals without a type check can still be a condo or mobile home compared with houses: tell the user to check the listing. ` +
         `Returns null for an unknown city. Use this for undervalued, bargain, deal, or discount questions. ${NEVER_INVENT}`,
       parameters: {
         type: "object",

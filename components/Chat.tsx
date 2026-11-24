@@ -26,6 +26,7 @@ type ListingCard = {
   address?: string;
   estValue: number | null;
   discountPct: number | null;
+  type?: string;
 };
 
 /** Basis line count and its priority: a search beats a snapshot, which beats a compare sum. */
@@ -165,6 +166,7 @@ function readCard(value: unknown): ListingCard | null {
   };
   if (typeof row.url === "string" && row.url.startsWith("https://")) card.url = row.url;
   if (typeof row.address === "string" && row.address.trim()) card.address = row.address.trim();
+  if (typeof row.type === "string" && row.type) card.type = row.type;
   return card;
 }
 
@@ -215,6 +217,8 @@ function readCount(name: string, data: unknown): Basis | null {
 
 function cardMeta(card: ListingCard): string {
   const parts: string[] = [];
+  // "SINGLE_FAMILY" -> "Single family"
+  if (card.type) parts.push(card.type.charAt(0) + card.type.slice(1).toLowerCase().replace(/_/g, " "));
   if (card.beds !== null) parts.push(`${card.beds} bd`);
   if (card.baths !== null) parts.push(`${card.baths} ba`);
   if (card.sqft !== null) parts.push(`${card.sqft.toLocaleString("en-CA")} sqft`);

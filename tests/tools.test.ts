@@ -9,7 +9,9 @@ import {
   findDeals,
   knownCities,
   MAX_DISCOUNT_PCT,
+  passesTypeCheck,
   rankAreas,
+  sameTypeDiscountPct,
   searchListings,
   TOOL_IMPLS,
   TOOL_SPECS,
@@ -611,7 +613,8 @@ describe("findDeals", () => {
           hasEstimate(row) &&
           row.price >= DEAL_MIN_PRICE &&
           discountOf(row) >= minDiscount &&
-          discountOf(row) <= MAX_DISCOUNT_PCT,
+          discountOf(row) <= MAX_DISCOUNT_PCT &&
+          passesTypeCheck(row, minDiscount),
       )
       .sort(
         (a, b) =>
@@ -714,7 +717,35 @@ describe("findDeals", () => {
     if (floor > 20) expect(result?.totalMatches as number).toBeLessThan(expectedMatches(busiest, 20).length);
   });
 
-  it("sorts discount descending then price then address, and returns copies with all 12 fields", () => {
+  it("checks typed deals against the median of same-city, same-type, same-bedroom listings", () => {
+    const typed = listings.find((row) => row.type && sameTypeDiscountPct(row) !== null) as Listing;
+    expect(typed).toBeDefined();
+    const peers = listings
+      .filter((row) => row.city === typed.city && row.type === typed.type && row.beds === typed.beds)
+      .map((row) => row.price)
+      .sort((a, b) => a - b);
+    expect(peers.length).toBeGreaterThanOrEqual(5);
+    const mid = peers.length / 2;
+    const median = peers.length % 2 ? peers[Math.floor(mid)] : (peers[mid - 1] + peers[mid]) / 2;
+    expect(sameTypeDiscountPct(typed)).toBe(Math.round(((median - typed.price) / median) * 1000) / 10);
+    expect(sameTypeDiscountPct({ ...typed, type: null })).toBeNull();
+    expect(passesTypeCheck({ ...typed, type: null }, 99)).toBe(true);
+  });
+
+  it("reports deals removed by the type check and how many passed it", () => {
+    for (const city of knownCities().filter((name) => findDeals({ city: name })!.totalMatches > 0).slice(0, 15)) {
+      const result = findDeals({ city, limit: 25 })!;
+      const floor = result.minDiscount;
+      const inWindow = listings.filter((row) => row.city === city && hasUsableEstimate(row) && row.price >= DEAL_MIN_PRICE &&
+        discountOf(row) >= floor && discountOf(row) <= MAX_DISCOUNT_PCT);
+      const kept = inWindow.filter((row) => passesTypeCheck(row, floor));
+      expect(result.totalMatches).toBe(kept.length);
+      expect(result.excludedByType).toBe(inWindow.length - kept.length);
+      expect(result.typeChecked).toBe(kept.filter((row) => sameTypeDiscountPct(row) !== null).length);
+    }
+  });
+
+  it("sorts discount descending then price then address, and returns copies with all 13 fields", () => {
     const expected = expectedMatches(dealCity, cityDealFloorPct(dealCity));
     expect(expected.length).toBeGreaterThan(0);
 
@@ -743,7 +774,8 @@ describe("findDeals", () => {
     expect(source).toBeDefined();
     expect(first).toEqual(source);
     expect(first).not.toBe(source);
-    expect(Object.keys(first).length).toBe(12);
+    expect(Object.keys(first).length).toBe(13);
+    expect(Object.keys(first)).toContain("type");
     expect(Object.keys(first)).toContain("estValue");
     expect(Object.keys(first)).toContain("discountPct");
 

@@ -9,6 +9,8 @@ export type Listing = {
   seen: string;
   address?: string;
   url?: string;
+  /** Zillow homeType ("SINGLE_FAMILY", "CONDO", ...); null when the source did not record it. */
+  type?: string | null;
   /** Offline estimate of the typical asking price for comparable listings; null when the city is too small. */
   estValue: number | null;
   /** Percent below estValue (positive = asking below); null exactly when estValue is null. */
@@ -142,6 +144,10 @@ export type FindDealsResult = {
   /** Default threshold: max(dataset threshold, 2 x typicalErrorPct). */
   noiseFloorPct: number;
   maxDiscountPct: number;
+  /** Deals in the discount window dropped because they are not below their same-type comparables. */
+  excludedByType: number;
+  /** Matching deals that were checked against same-type comparables and passed. */
+  typeChecked: number;
   /** Set when no deal can be called (estimates too noisy) or a requested threshold is below the noise floor. */
   note?: string;
 };
