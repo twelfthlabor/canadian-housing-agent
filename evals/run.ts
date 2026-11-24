@@ -40,7 +40,7 @@ import type { Provider } from "../lib/providers";
 import { TOOL_IMPLS, citySnapshot, findDeals, searchListings } from "../lib/tools";
 import type { CitySnapshot } from "../lib/types";
 import { computeMortgage, maxPriceForIncome } from "../lib/mortgage";
-import { collectGroundTruth, extractNumbers, isGrounded, type Extracted, type GroundingResult } from "../lib/grounding";
+import { checkGrounding, collectGroundTruth, extractNumbers, isGrounded, type Extracted, type GroundingResult } from "../lib/grounding";
 
 /* -------------------------------------------------------------------------
  * Types
@@ -142,10 +142,10 @@ const CASES_PATH = path.join(here, "cases.jsonl");
  * CLI
  * ---------------------------------------------------------------------- */
 
-type Flags = { limit?: number; category?: Category; ids?: string[]; mock: boolean; help: boolean; resume: boolean };
+type Flags = { limit?: number; category?: Category; ids?: string[]; mock: boolean; help: boolean; resume: boolean; rescore: boolean };
 
 function parseFlags(argv: string[]): Flags {
-  const flags: Flags = { mock: false, help: false, resume: false };
+  const flags: Flags = { mock: false, help: false, resume: false, rescore: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") {
@@ -158,6 +158,10 @@ function parseFlags(argv: string[]): Flags {
     }
     if (arg === "--resume") {
       flags.resume = true;
+      continue;
+    }
+    if (arg === "--rescore") {
+      flags.rescore = true;
       continue;
     }
     if (arg === "--ids" || arg.startsWith("--ids=")) {
@@ -208,6 +212,7 @@ function usage(): void {
   npm run evals                                live, needs GROQ_API_KEY
   npm run evals -- --category numeric          run one category
   npm run evals -- --limit 5                   run the first N cases
+  npm run evals -- --rescore                   re-score the last live report's saved answers with the current checks (no model calls)
   npm run evals -- --resume                    keep completed rows from the last live report for the same model, run the rest
   npm run evals -- --ids T01,D01               run only the named case ids
   npm run evals -- --mock                      force the mock provider
@@ -795,6 +800,37 @@ export function resumableRows(previous: EvalReport | null, model: string, caseId
   return previous.cases.filter((row) => wanted.has(row.id) && row.answer.trim() !== "" && !row.detail.startsWith("error:"));
 }
 
+/**
+ * Rebuild a run outcome from a saved report row: the model's answer as recorded, the
+ * tool calls re-run (they are deterministic), and the grounding check redone. Lets a
+ * scorer fix be applied to real answers without another model run.
+ */
+export function outcomeFromRow(c: EvalCase, row: CaseReport): RunOutcome {
+  const toolResults: unknown[] = [];
+  const grounded: number[] = [];
+  for (const event of row.tool_events) {
+    const impl = TOOL_IMPLS[event.name];
+    if (typeof impl !== "function") continue;
+    try {
+      const result = impl(event.args);
+      toolResults.push(result);
+      collectGroundTruth(result, grounded);
+    } catch {
+      // A call that throws contributed nothing live either.
+    }
+  }
+  const earlierAnswers = (row.turns ?? []).slice(0, -1).map((turn) => turn.answer);
+  const grounding = row.answer
+    ? checkGrounding({ answer: row.answer, toolResults, messages: [...caseTurns(c), ...earlierAnswers] })
+    : undefined;
+  const turns = row.turns?.map((turn) => ({
+    answer: turn.answer,
+    toolEvents: turn.tools.map((name) => ({ name, args: {} })),
+    ...(turn.error ? { error: turn.error } : {}),
+  }));
+  return { answer: row.answer, toolEvents: row.tool_events, grounded, grounding, ...(turns ? { turns } : {}) };
+}
+
 function readPreviousReport(): EvalReport | null {
   if (!existsSync(REPORT_PATH)) return null;
   try {
@@ -882,6 +918,32 @@ async function main(): Promise<number> {
   if (selected.length === 0) {
     console.error("no cases selected");
     return 1;
+  }
+
+  if (flags.rescore) {
+    const previous = readPreviousReport();
+    if (!previous || previous.mode !== "live") {
+      console.error("--rescore needs a live evals/report.json to re-score.");
+      return 1;
+    }
+    const byId = new Map(allCases.map((c) => [c.id, c]));
+    // Provider-error rows have no answer to score; --resume reruns them.
+    const rows = previous.cases.map((row) => {
+      const c = byId.get(row.id);
+      return c && !row.detail.startsWith("error:") ? buildCaseReport(c, outcomeFromRow(c, row)) : row;
+    });
+    const report = buildReport(rows, {
+      isMock: false,
+      providerName: previous.provider,
+      model: previous.model,
+      startedAt: new Date(previous.started_at),
+      completeSuite: previous.complete_suite,
+    });
+    writeReport(report);
+    printTable(rows);
+    console.log(`
+re-scored ${rows.length} saved answers: ${JSON.stringify(report.scores)} grounding_rate=${report.grounding_rate}`);
+    return 0;
   }
 
   const isMock = flags.mock || /^(1|true|yes)$/i.test(process.env.MOCK_LLM?.trim() ?? "");

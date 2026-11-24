@@ -31,7 +31,12 @@ function suffixMultiplier(suffix?: string): number {
 const NUMBER_PATTERN =
   /(?<![\w.])(?:(\$|CAD)\s*)?(\d[\d,]*(?:\.\d+)?)(?:\s*(billion|million|thousand|bn|k|m)\b)?(?:\s*(%|percent\b|per cent\b|CAD\b))?/gi;
 
+// Narrow no-break, no-break and thin spaces between digit groups are thousands separators
+// ("$763 000"); plain spaces are not, so "2026 200 listings" stays two numbers.
+const SPACED_THOUSANDS = /(\d)[   ](?=\d{3}(?!\d))/g;
+
 export function extractNumbers(text: string): Extracted[] {
+  text = text.replace(SPACED_THOUSANDS, "$1,");
   const out: Extracted[] = [];
   // One pass keeps a currency amount from also becoming a plain count.
   for (const match of text.matchAll(NUMBER_PATTERN)) {
@@ -49,10 +54,13 @@ export function collectGroundTruth(value: unknown, into: number[]): void {
   if (typeof value === "number" && Number.isFinite(value)) {
     into.push(value);
     if (value > 0 && value <= 1) into.push(value * 100); // shares quoted as percentages
+    if (value < 0) into.push(-value); // "3.6% above the estimate" for a discountPct of -3.6
     return;
   }
   if (typeof value === "string") {
     for (const m of value.matchAll(/\d[\d,]*(?:\.\d+)?/g)) into.push(parseNumberString(m[0]));
+    // "$800k" in a message also grounds 800,000.
+    for (const n of extractNumbers(value)) into.push(n.value);
     return;
   }
   if (Array.isArray(value)) {

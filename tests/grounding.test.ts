@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkGrounding, checkedFigures, isGrounded } from "../lib/grounding";
+import { checkGrounding, checkedFigures, extractNumbers, isGrounded } from "../lib/grounding";
 
 // Shape of the live find_deals result captured for "Find me deals in Hamilton" (2026-11-20).
 const hamiltonDeals = {
@@ -129,5 +129,34 @@ describe("per-listing grounding", () => {
   it("keeps sentences about different listings apart within one paragraph", () => {
     const answer = "11 Pirie Dr #19 asks $599,900. 161 Berkindale Dr #8 asks $385,000.";
     expect(checkGrounding({ answer, toolResults: [search], messages: [] }).ungrounded).toEqual([]);
+  });
+});
+
+// Cases from the 2026-11-23 live eval: gpt-oss writes U+202F (narrow no-break space) as a
+// thousands separator, quotes user figures with a "k", and states negative discounts in words.
+describe("live-eval formats", () => {
+  const nnbsp = " ";
+
+  it("reads narrow-space thousands separators as one number", () => {
+    expect(extractNumbers(`up to ≈ $763${nnbsp}000 on $150${nnbsp}000`).map((n) => n.value)).toEqual([763000, 150000]);
+    expect(extractNumbers(`1${nnbsp}910 listings`).map((n) => n.value)).toEqual([1910]);
+    expect(extractNumbers("In 2026 200 listings").map((n) => n.value)).toEqual([2026, 200]);
+  });
+
+  it("grounds the M02 mortgage answer", () => {
+    const answer = `a household earning $150${nnbsp}000 can afford about **$763${nnbsp}000**, keeping costs at the 39${nnbsp}% GDS limit.`;
+    const result = checkGrounding({ answer, toolResults: [{ householdIncome: 150000, maxAffordablePrice: 763000, gdsLimitPct: 39 }], messages: ["What can I afford on $150,000?"] });
+    expect(result.ungrounded).toEqual([]);
+  });
+
+  it("grounds a user's '$800k' quoted back as '$800 k'", () => {
+    const result = checkGrounding({ answer: `listings that ask ≤ $800${nnbsp}k`, toolResults: [{ totalMatches: 5 }], messages: ["Only under $800k."] });
+    expect(result.ungrounded).toEqual([]);
+  });
+
+  it("grounds a negative discount stated as a percentage above the estimate", () => {
+    const listing = { address: "4059 Highland Ave, Montreal, QC H3Y 1R4", price: 1899000, estValue: 1833000, discountPct: -3.6 };
+    const answer = `- **4059 Highland Ave** – $1,899,000. Estimate: $1,833,000 (price ~ 3.6${nnbsp}% above the estimate).`;
+    expect(checkGrounding({ answer, toolResults: [{ listings: [listing] }], messages: [] }).ungrounded).toEqual([]);
   });
 });
